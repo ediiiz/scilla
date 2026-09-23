@@ -43,6 +43,15 @@ A v1 spec at `.scratch/scilla/spec.md`, with every design decision settled (Coll
 
 - 2026-09-22: v1 is implemented in `packages/core`, `packages/tui` and `apps/cli`. All gates pass (`bun run verify`, `check:security`) and a sandboxed end-to-end smoke test passed. Publishing is blocked: the npm names `scilla` (a security holding package) and `@scilla` (a scope owned by someone else) are taken.
 
+## Next (after v1)
+
+The effort continues past v1, toward what makes scilla more than a multi-agent installer: reviewed, reproducible skill sharing for teams.
+- [Reviewed updates](issues/12-reviewed-updates.md): `outdated`, `diff`, and update PRs on GitHub, Gitea and Forgejo. In progress.
+- [Restore from the lock](issues/16-restore-from-lock.md): `scilla install`. In progress.
+- [Context budget and trigger clashes](issues/14-context-budget-and-trigger-clashes.md)
+- [Usage-based pruning](issues/15-usage-based-pruning.md)
+- [Customise a referenced skill without forking](issues/13-overlays.md): needs grilling first.
+
 ## Not yet specified
 
 - **Custom component inventory**: exactly which components to build on the primitives (tree-multiselect, list, spinner, status/log pane) and how they're styled. Waits on the TUI prototype and the OpenTUI/tuiparts research.
