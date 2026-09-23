@@ -8,6 +8,7 @@ import {
   parseReferenceEntry,
   readManifest,
   referenceKey,
+  shortenReference,
   writeManifest,
   type Manifest,
   type ReferenceEntry,
@@ -55,11 +56,12 @@ const requireManifest = async (dir: string): Promise<Manifest> => {
 /**
  * Append a Reference (string shorthand or object form) to the Collection in `dir`; returns its
  * parsed source. The source must parse, and a local one must exist; an entry equal to an existing
- * one (the string form equals `{ source }`) is refused.
+ * one (the string form equals `{ source }`) is refused. A github.com page link is stored as its
+ * shorthand.
  */
 export const addReference = async (dir: string, entry: ReferenceEntry) => {
   const manifest = await requireManifest(dir);
-  const parsed = parseReferenceEntry(entry);
+  const parsed = shortenReference(parseReferenceEntry(entry));
   const { source } = normalizeReference(parsed, dir);
   const local = join(source.url, source.path);
 

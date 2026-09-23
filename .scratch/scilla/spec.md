@@ -14,6 +14,7 @@ As in [Collection manifest format](issues/04-collection-manifest-format.md): `sc
 - `owner/repo[/path][@name][#ref]`: GitHub, fetched from `https://github.com/owner/repo.git`.
 - Any git URL (`https://…`, `ssh://…`, `git@…`, `file://…`, or ending in `.git`) `[#ref]`; the path goes in the object's `path` field.
 - A github.com https URL (`https://github.com/owner/repo`, with or without `.git` and a trailing slash) is kind `github` with the canonical URL, so it has the shorthand's key (`owner/repo`), is audited, and is mirrored to skills-lock.json as GitHub. `git@github.com:owner/repo.git` stays kind `git` and is fetched over SSH: the user chose SSH on purpose.
+- A github.com page link: `https://github.com/o/r/tree/<ref>[/<path>]` is that folder, `…/blob/<ref>/<path>/SKILL.md` is the folder holding that SKILL.md (a blob link to any other file is a `SourceError`). Kind `github`, with the path and `<ref>` as the Pin, except `main` and `master`, which float (no Pin): offline, scilla can't know the default branch, and those two nearly always are it. The ref is assumed to be one segment, since a branch with `/` is ambiguous with the path. `?query` and `#anchor` are ignored. `scilla ref add` stores the shorthand (`formatSource`), not the URL.
 - A local directory (`./x`, `../x`, `/abs`, `~/x`). It's read from the working tree without git (commit `local`). Useful for Curators and tests.
 - Identity of a fetched repo = its canonical git URL.
 

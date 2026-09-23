@@ -22,6 +22,15 @@ const GITHUB_URL = /^https:\/\/github\.com\/([\w.-]+)\/([\w.-]+?)(?:\.git)?\/?$/
 
 const SKILL_SELECTOR = /^(.*)@([\w.-]+)$/;
 
+/** A github.com page: `/tree/<ref>[/<path>]` or `/blob/<ref>/<path>`, ignoring any `?query` or `#anchor`. */
+const GITHUB_PAGE =
+  /^https:\/\/github\.com\/([\w.-]+)\/([\w.-]+)\/(tree|blob)\/([^/?#]+)([^?#]*)(?:[?#].*)?$/;
+
+/** Default-branch names a page link floats with instead of pinning. */
+const FLOATING_BRANCHES = new Set(["main", "master"]);
+
+const SKILL_FILE = "SKILL.md";
+
 const trimSlashes = (path: string) => path.replace(/^\/+|\/+$/g, "");
 
 const isLocal = (spec: string) =>
@@ -66,6 +75,52 @@ const canonicalUrl = (url: string) => {
   return github === null ? url : `https://github.com/${github[1]}/${github[2]}.git`;
 };
 
+const decodePath = (path: string, raw: string) => {
+  try {
+    return decodeURIComponent(path);
+  } catch {
+    throw new SourceError(`Can't read the path in "${raw}".`);
+  }
+};
+
+/**
+ * A github.com page link as a GitHub source: `…/tree/<ref>[/<path>]` is that folder, and
+ * `…/blob/<ref>/<path>/SKILL.md` is the folder holding that SKILL.md. The ref is one path segment
+ * (a branch with a `/` can't be told apart from the path), and `main` or `master` float with the
+ * default branch instead of becoming a Pin. Undefined when `raw` isn't such a link.
+ */
+const githubPage = (raw: string): Source | undefined => {
+  const match = GITHUB_PAGE.exec(raw);
+
+  if (match === null) {
+    return undefined;
+  }
+
+  const [, owner = "", repo = "", view, ref = "", rest = ""] = match;
+  const segments = trimSlashes(decodePath(rest, raw)).split("/");
+
+  if (view === "blob" && segments.at(-1) !== SKILL_FILE) {
+    throw new SourceError(
+      `"${raw}" links to a file. Link to a SKILL.md, or to a folder (…/tree/<ref>/<path>).`,
+    );
+  }
+
+  return {
+    kind: "github",
+    url: `https://github.com/${owner}/${repo}.git`,
+    path: (view === "blob" ? segments.slice(0, -1) : segments).join("/"),
+    ref: FLOATING_BRANCHES.has(ref) ? undefined : ref,
+    skill: undefined,
+  };
+};
+
+/** The shorthand for a github.com page link, which is what a manifest stores; other sources as given. */
+export const pageShorthand = (raw: string) => {
+  const page = githubPage(raw.trim());
+
+  return page === undefined ? raw : formatSource(page);
+};
+
 /** The `owner/repo` of a GitHub URL, or undefined for other hosts. */
 export const githubRepo = (url: string) => {
   const github = GITHUB_URL.exec(url);
@@ -74,14 +129,21 @@ export const githubRepo = (url: string) => {
 };
 
 /**
- * Parse a Reference or `add` argument: `owner/repo[/path][@name][#ref]`, a git URL `[#ref]`,
- * or a local directory. Relative local paths resolve against `cwd`, and `~` expands to `home`.
+ * Parse a Reference or `add` argument: `owner/repo[/path][@name][#ref]`, a git URL `[#ref]`, a
+ * github.com page link (see `githubPage`), or a local directory. Relative local paths resolve
+ * against `cwd`, and `~` expands to `home`.
  */
 export const parseSource = (raw: string, cwd: string, home = homedir()): Source => {
   const trimmed = raw.trim();
 
   if (trimmed === "") {
     throw new SourceError("Empty source.");
+  }
+
+  const page = githubPage(trimmed);
+
+  if (page !== undefined) {
+    return page;
   }
 
   const { spec: withSkill, ref } = splitRef(trimmed);

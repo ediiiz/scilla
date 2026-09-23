@@ -3,18 +3,20 @@
 A source names where skills come from. It's the argument of `scilla add` and `scilla ref add`, and
 each entry of `references` in `scilla.json`.
 
-| Source                                   | Meaning                                             |
-| ---------------------------------------- | --------------------------------------------------- |
-| `owner/repo`                             | A GitHub repo (`https://github.com/owner/repo.git`) |
-| `owner/repo/path/to/folder`              | A folder inside it                                  |
-| `owner/repo@skill-name`                  | Only the skill with that name                       |
-| `owner/repo#v1.2.0`                      | Pinned to a tag, branch or commit                   |
-| `owner/repo/skills@pdf#main`             | All of the above at once                            |
-| `https://github.com/owner/repo#ref`      | The same GitHub repo as `owner/repo`                |
-| `https://host/group/repo.git#ref`        | Any git URL                                         |
-| `git@host:group/repo.git`, `ssh://…`     | SSH URLs                                            |
-| `file:///srv/skills.git`                 | A repo on disk, fetched through git                 |
-| `./vendor/skills`, `../x`, `/abs`, `~/x` | A local folder, read in place without git           |
+| Source                                               | Meaning                                             |
+| ---------------------------------------------------- | --------------------------------------------------- |
+| `owner/repo`                                         | A GitHub repo (`https://github.com/owner/repo.git`) |
+| `owner/repo/path/to/folder`                          | A folder inside it                                  |
+| `owner/repo@skill-name`                              | Only the skill with that name                       |
+| `owner/repo#v1.2.0`                                  | Pinned to a tag, branch or commit                   |
+| `owner/repo/skills@pdf#main`                         | All of the above at once                            |
+| `https://github.com/owner/repo#ref`                  | The same GitHub repo as `owner/repo`                |
+| `https://github.com/owner/repo/tree/v2/skills`       | A folder at a ref, copied from the browser          |
+| `https://github.com/owner/repo/blob/v2/pdf/SKILL.md` | The folder holding that SKILL.md                    |
+| `https://host/group/repo.git#ref`                    | Any git URL                                         |
+| `git@host:group/repo.git`, `ssh://…`                 | SSH URLs                                            |
+| `file:///srv/skills.git`                             | A repo on disk, fetched through git                 |
+| `./vendor/skills`, `../x`, `/abs`, `~/x`             | A local folder, read in place without git           |
 
 ## The rules
 
@@ -27,6 +29,18 @@ each entry of `references` in `scilla.json`.
   counts as GitHub: it's the same repo as `owner/repo`, installed under the same key, and it gets
   security ratings (see `scilla docs audit`). An SSH URL such as `git@github.com:owner/repo.git`
   stays a plain git URL and is fetched over SSH.
+- **GitHub page link**: a link copied from github.com's file browser.
+  - `https://github.com/owner/repo/tree/<ref>/<path>` is that folder, and `…/tree/<ref>` the
+    whole repo.
+  - `https://github.com/owner/repo/blob/<ref>/<path>/SKILL.md` is the folder holding that
+    `SKILL.md`. A link to any other file is refused.
+  - `<ref>` becomes the Pin, except `main` and `master`: those float with the default branch, as
+    if no Pin were given. To pin one of them, write the shorthand, such as `owner/repo#main`.
+  - `<ref>` is one path segment. A branch with a `/` in it (`feature/x`) can't be told apart from
+    the path, so write the shorthand instead: `owner/repo/path#feature/x`.
+  - A `?query` or `#anchor` on the link is ignored, and `%`-escapes in the path are decoded.
+  - `scilla ref add` writes such a link into `scilla.json` as the shorthand it stands for
+    (`owner/repo/path#ref`), not as the URL.
 - **Local folder**: `.`, `..`, `~`, or a path starting with `/`, `./`, `../` or `~/`. `@name` works
   here too. Relative paths resolve against the current directory for `add`, and against the
   Collection's folder inside `scilla.json`. `~` is your home directory. A local source has no

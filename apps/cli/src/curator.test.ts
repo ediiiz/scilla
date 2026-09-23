@@ -59,6 +59,24 @@ describe("ref add", () => {
     expect(manifestIn(cwd).references).toEqual(["owner/repo"]);
   });
 
+  test("writes a GitHub page link as its shorthand", async () => {
+    const cwd = plant(temp("curator"), manifestFile("kit"));
+    const link = "https://github.com/owner/repo/tree/v2/skills/pdf";
+
+    expect((await cli(["ref", "add", link, "--no-verify"], { cwd })).code).toBe(0);
+    await cli(
+      ["ref", "add", "https://github.com/owner/repo/tree/main", "--optional", "--no-verify"],
+      {
+        cwd,
+      },
+    );
+
+    expect(manifestIn(cwd).references).toEqual([
+      "owner/repo/skills/pdf#v2",
+      { source: "owner/repo", optional: true },
+    ]);
+  });
+
   test("appends the object form with filters", async () => {
     const cwd = plant(temp("curator"), manifestFile("kit"));
 

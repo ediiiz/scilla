@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { homedir } from "node:os";
 import { ScillaError } from "./errors.ts";
-import { formatSource, githubRepo, parseSource, withOverrides } from "./source.ts";
+import { formatSource, githubRepo, pageShorthand, parseSource, withOverrides } from "./source.ts";
 
 const CWD = "/work/project";
 
@@ -63,6 +63,52 @@ describe("parseSource", () => {
       skill: undefined,
     });
     expect(formatSource(source)).toBe(formatSource(parseSource("Owner/Repo#v1", CWD)));
+  });
+
+  test.each([
+    [
+      "https://github.com/vercel-labs/agent-skills/tree/v2/skills/react",
+      { path: "skills/react", ref: "v2" },
+      "vercel-labs/agent-skills/skills/react#v2",
+    ],
+    [
+      "https://github.com/o/r/blob/0123abc/skills/pdf/SKILL.md",
+      { path: "skills/pdf", ref: "0123abc" },
+      "o/r/skills/pdf#0123abc",
+    ],
+    ["https://github.com/o/r/tree/next", { path: "", ref: "next" }, "o/r#next"],
+    ["https://github.com/o/r/tree/main/skills/", { path: "skills", ref: undefined }, "o/r/skills"],
+    ["https://github.com/o/r/blob/master/SKILL.md", { path: "", ref: undefined }, "o/r"],
+    [
+      "https://github.com/o/r/tree/dev/my%20skills?tab=readme#usage",
+      { path: "my skills", ref: "dev" },
+      "o/r/my skills#dev",
+    ],
+  ])("reads the GitHub page link %s", (raw, fields, shorthand) => {
+    const source = parseSource(raw, CWD);
+
+    expect(source).toEqual({
+      kind: "github",
+      url: `https://github.com/${raw.split("/")[3]}/${raw.split("/")[4]}.git`,
+      skill: undefined,
+      ...fields,
+    });
+    expect(formatSource(source)).toBe(shorthand);
+    expect(pageShorthand(raw)).toBe(shorthand);
+  });
+
+  test("refuses a GitHub page link to a file other than SKILL.md or with a broken path", () => {
+    expect(() => parseSource("https://github.com/o/r/blob/main/README.md", CWD)).toThrow(
+      /links to a file/,
+    );
+    expect(() => parseSource("https://github.com/o/r/tree/main/%E0%A4%A", CWD)).toThrow(
+      ScillaError,
+    );
+  });
+
+  test("leaves sources that aren't GitHub page links as given", () => {
+    expect(pageShorthand("https://github.com/o/r")).toBe("https://github.com/o/r");
+    expect(pageShorthand("./vendor")).toBe("./vendor");
   });
 
   test("canonicalises GitHub https URLs", () => {

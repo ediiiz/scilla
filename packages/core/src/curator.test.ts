@@ -74,6 +74,28 @@ describe("addReference", () => {
     ]);
   });
 
+  test("stores a GitHub page link as its shorthand, in either form", async () => {
+    const dir = await initialised();
+
+    expect(await addReference(dir, "https://github.com/o/r/tree/v1/skills/pdf")).toMatchObject({
+      kind: "github",
+      path: "skills/pdf",
+      ref: "v1",
+    });
+    await addReference(dir, {
+      source: "https://github.com/o/r/blob/main/tools/SKILL.md",
+      optional: true,
+    });
+    await expect(addReference(dir, "o/r/skills/pdf#v1")).rejects.toThrow(
+      /already has this Reference/,
+    );
+
+    expect((await readManifest(dir))?.references).toEqual([
+      "o/r/skills/pdf#v1",
+      { source: "o/r/tools", optional: true },
+    ]);
+  });
+
   test("refuses an exact duplicate but allows a different Pin", async () => {
     const dir = await initialised();
 

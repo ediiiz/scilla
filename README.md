@@ -127,6 +127,7 @@ Anywhere scilla takes a source (`add`, `ref add`, or `references` in `scilla.jso
 | `owner/repo@skill-name`                   | One skill, by name                |
 | `owner/repo#v1.2.0`                       | Pinned to a tag, branch or commit |
 | `https://github.com/owner/repo`           | The same as `owner/repo`          |
+| `https://github.com/owner/repo/tree/v2/x` | A folder link copied from GitHub  |
 | `https://…/repo.git`, `git@host:repo.git` | Any git host                      |
 | `./vendor/skills`, `~/my-skills`          | A local folder                    |
 

@@ -3,7 +3,7 @@ import { readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { z } from "zod";
 import { ManifestError, messageOf } from "./errors.ts";
-import { parseSource, withOverrides, type Source } from "./source.ts";
+import { pageShorthand, parseSource, withOverrides, type Source } from "./source.ts";
 
 export const MANIFEST_FILE = "scilla.json";
 
@@ -49,6 +49,16 @@ const ReferenceInputSchema = z.union([
   z.string().transform((source) => ReferenceObjectSchema.parse({ source })),
   ReferenceObjectSchema,
 ]);
+
+// Keeps the entry's form: a string stays a string, an object keeps its other fields.
+const ShortenedEntrySchema = z.union([
+  z.string().transform(pageShorthand),
+  ReferenceObjectSchema.transform((entry) => ({ ...entry, source: pageShorthand(entry.source) })),
+]);
+
+/** The entry with a github.com page link as its source written as shorthand (`owner/repo/path#ref`). */
+export const shortenReference = (raw: ReferenceEntry): ReferenceEntry =>
+  ShortenedEntrySchema.parse(raw);
 
 /** Validate a Reference entry (from a CLI or TUI) against the manifest schema. */
 export const parseReferenceEntry = (raw: ReferenceEntry) => {
