@@ -30,13 +30,51 @@ if (output !== undefined) {
   appendFileSync(output, "");
 }
 
-const run = (cmd: readonly string[], cwd: string) => {
-  const { exitCode } = Bun.spawnSync([...cmd], { cwd, stdio: ["inherit", "inherit", "inherit"] });
+/** Copy a child's output stream to ours as it arrives, and keep the text. */
+const tee = async (stream: ReadableStream<Uint8Array>, sink: NodeJS.WriteStream) => {
+  const decoder = new TextDecoder();
+  const chunks: string[] = [];
+
+  await stream.pipeTo(
+    new WritableStream({
+      write(chunk) {
+        sink.write(chunk);
+        chunks.push(decoder.decode(chunk, { stream: true }));
+      },
+    }),
+  );
+
+  return chunks.join("");
+};
+
+/** Run a command with its output streamed through; resolves with its exit code and that output. */
+const run = async (cmd: readonly string[], cwd: string) => {
+  const child = Bun.spawn([...cmd], { cwd, stdin: "inherit", stdout: "pipe", stderr: "pipe" });
+
+  const [stdout, stderr] = await Promise.all([
+    tee(child.stdout, process.stdout),
+    tee(child.stderr, process.stderr),
+  ]);
+
+  return { exitCode: await child.exited, output: `${stdout}${stderr}` };
+};
+
+const must = async (cmd: readonly string[], cwd: string) => {
+  const { exitCode } = await run(cmd, cwd);
 
   if (exitCode !== 0) {
     throw new Error(`${cmd.join(" ")} exited with ${exitCode}`);
   }
 };
+
+const nothingToPublish = () => {
+  process.stdout.write(`${spec} is already on npm; nothing to publish.\n`);
+  process.exit(0);
+};
+
+// npm's answer when the version is on the registry already, which `npm view` can miss for a
+// minute after a publish because of registry lag.
+const ALREADY_PUBLISHED = /E409|cannot publish over/i;
 
 if (version.includes("-") !== (values.tag !== "latest")) {
   throw new Error(
@@ -46,22 +84,23 @@ if (version.includes("-") !== (values.tag !== "latest")) {
   );
 }
 
-const view = Bun.spawnSync(["npm", "view", spec, "version"], { cwd: packageDir });
+const view = Bun.spawnSync(["npm", "view", spec, "version", "--prefer-online"], {
+  cwd: packageDir,
+});
 
 const stderr = view.stderr.toString();
 
 if (view.exitCode === 0 && view.stdout.toString().trim() === version) {
-  process.stdout.write(`${spec} is already on npm; nothing to publish.\n`);
-  process.exit(0);
+  nothingToPublish();
 }
 
 if (view.exitCode !== 0 && !stderr.includes("E404")) {
   throw new Error(`npm view ${spec} failed:\n${stderr}`);
 }
 
-run(["bun", "run", "verify"], join(packageDir, "..", ".."));
+await must(["bun", "run", "verify"], join(packageDir, "..", ".."));
 
-run(
+const published = await run(
   [
     "npm",
     "publish",
@@ -74,6 +113,14 @@ run(
   ],
   packageDir,
 );
+
+if (published.exitCode !== 0) {
+  if (!ALREADY_PUBLISHED.test(published.output)) {
+    throw new Error(`npm publish exited with ${published.exitCode}`);
+  }
+
+  nothingToPublish();
+}
 
 if (output !== undefined && values.tag === "latest" && !values["dry-run"]) {
   appendFileSync(output, `${JSON.stringify({ type: "git-tag", tag: spec, packageName: name })}\n`);
