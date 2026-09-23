@@ -202,16 +202,20 @@ describe("SkillPicker keys", () => {
       })),
     );
 
-    const { frame, press } = await mount(many, 16);
+    const { frame, press, waitFor } = await mount(many, 16);
 
     expect(frame()).not.toContain("skill-29");
 
+    // Focus reaches the list a tick after the key, and the scroll follows in an effect after that
+    // render; under load that takes more than the passes `press` waits for, so wait on the frame.
     await press("END");
+    await waitFor("› [ ] skill-29");
 
     expect(frame()).toContain("› [ ] skill-29");
     expect(frame()).not.toContain("skill-00");
 
     await press("HOME");
+    await waitFor("› [ ] skill-00");
 
     expect(frame()).toContain("› [ ] skill-00");
   });
