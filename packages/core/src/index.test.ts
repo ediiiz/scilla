@@ -14,6 +14,7 @@ test("the barrel exposes the public API", () => {
     "deleteCollection",
     "deleteSkill",
     "envValue",
+    "executablesSummary",
     "findCollection",
     "formatSource",
     "fromLockSource",

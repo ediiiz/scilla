@@ -45,6 +45,28 @@ describe("add", () => {
     expect(existsSync(join(project, "skills-lock.json"))).toBe(true);
   });
 
+  test("names at most 5 executables in the warning", async () => {
+    const scripts = Object.fromEntries(
+      Array.from({ length: 12 }, (_, index) => [
+        `skills/big/s${String(index).padStart(2, "0")}.sh`,
+        "",
+      ]),
+    );
+
+    const source = plant(temp("kit"), {
+      ...manifestFile("big"),
+      ...skillAt("skills/big", "big"),
+      ...scripts,
+    });
+
+    const { stderr } = await cli(["add", source]);
+
+    expect(stderr).toContain(
+      "warning: big contains executable files: skills/big/s00.sh, skills/big/s01.sh, " +
+        "skills/big/s02.sh, skills/big/s03.sh, skills/big/s04.sh, +7 more\n",
+    );
+  });
+
   test("--all installs optional skills too", async () => {
     const result = await cli(["add", kit(), "--all"]);
 

@@ -1,5 +1,6 @@
 import {
   applyPlan,
+  executablesSummary,
   Fetcher,
   findCollection,
   formatSource,
@@ -58,7 +59,9 @@ const pick = (current: Session, plan: Plan, audit: Promise<AuditReport>) => {
 const warnExecutables = (reporter: Reporter, plan: Plan, selected: ReadonlySet<string>) => {
   for (const { skill } of plan.choices) {
     if (selected.has(skill.name) && skill.executables.length > 0) {
-      reporter.warn(`${skill.name} contains executable files: ${skill.executables.join(", ")}`);
+      reporter.warn(
+        `${skill.name} contains executable files: ${executablesSummary(skill.executables).join(", ")}`,
+      );
     }
   }
 };

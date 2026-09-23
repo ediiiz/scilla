@@ -1,5 +1,5 @@
 import { afterAll, describe, expect, test } from "bun:test";
-import { discoverSkills, readSkill } from "./discovery.ts";
+import { discoverSkills, executablesSummary, readSkill } from "./discovery.ts";
 import { cleanup, skill, skillMd, tempDir, writeFiles } from "./testing/fixtures.ts";
 
 afterAll(cleanup);
@@ -143,5 +143,19 @@ describe("readSkill", () => {
       "s/setup.ps1",
       "s/tools/launch",
     ]);
+  });
+});
+
+const paths = (count: number) => Array.from({ length: count }, (_, index) => `bin/${index}.sh`);
+
+describe("executablesSummary", () => {
+  test("names up to 5 executables as they are", () => {
+    expect(executablesSummary([])).toEqual([]);
+    expect(executablesSummary(paths(5))).toEqual(paths(5));
+  });
+
+  test("names the first 5 of more, then counts the rest", () => {
+    expect(executablesSummary(paths(100))).toEqual([...paths(5), "+95 more"]);
+    expect(executablesSummary(paths(6))).toEqual([...paths(5), "+1 more"]);
   });
 });

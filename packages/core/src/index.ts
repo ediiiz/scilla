@@ -22,6 +22,8 @@ export type {
 
 export { addReference, initCollection, newOwnSkill } from "./curator.ts";
 
+export { executablesSummary } from "./discovery.ts";
+
 export { envValue } from "./env.ts";
 
 export { ManifestError, ScillaError, SourceError } from "./errors.ts";

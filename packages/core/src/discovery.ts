@@ -133,6 +133,21 @@ const findExecutables = async (skillDir: string, root: string) => {
     .toSorted();
 };
 
+/** How many executables are named wherever they're printed, before `+N more`. */
+const EXECUTABLES_SHOWN = 5;
+
+/**
+ * A skill's executables as printed: the first 5 paths, then `+N more` when there are others. The
+ * full list stays on the skill; this only keeps a warning about a big skill readable.
+ */
+export const executablesSummary = (executables: readonly string[]) =>
+  executables.length <= EXECUTABLES_SHOWN
+    ? [...executables]
+    : [
+        ...executables.slice(0, EXECUTABLES_SHOWN),
+        `+${executables.length - EXECUTABLES_SHOWN} more`,
+      ];
+
 /** Read the skill folder at `dir` (which must contain SKILL.md); `root` is the repo it came from. */
 export const readSkill = async (dir: string, root: string): Promise<FoundSkill> => {
   const frontmatter = parseFrontmatter(await readFile(join(dir, SKILL_FILE), "utf8"));

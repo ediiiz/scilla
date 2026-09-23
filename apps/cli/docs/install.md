@@ -60,7 +60,8 @@ about again before install. A file counts as executable when:
 - its first line is a `#!` shebang.
 
 Type declarations (`.d.ts`) never count, and library code elsewhere (such as `lib/index.ts`)
-doesn't either.
+doesn't either. Warnings and `scilla check` list at most 5 of a skill's executables, then
+`+N more`.
 
 ## Local edits
 

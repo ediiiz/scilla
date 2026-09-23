@@ -71,6 +71,16 @@ describe("SkillPicker rendering", () => {
     expect(frame()).toContain("path    skills/beta");
     expect(frame()).toContain("scripts/run.sh");
   });
+
+  test("the detail pane names at most 5 executables, then +N more", async () => {
+    const executables = Array.from({ length: 40 }, (_, index) => `bin/tool-${index}.sh`);
+    const { frame } = await mount(plan([{ name: "big", executables }]), 40);
+    const text = frame();
+
+    expect(text).toContain("bin/tool-4.sh");
+    expect(text).not.toContain("bin/tool-5.sh");
+    expect(text).toContain("+35 more");
+  });
 });
 
 describe("SkillPicker keys", () => {

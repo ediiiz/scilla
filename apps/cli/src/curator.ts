@@ -1,6 +1,7 @@
 import { basename, resolve } from "node:path";
 import {
   addReference,
+  executablesSummary,
   Fetcher,
   initCollection,
   newOwnSkill,
@@ -84,7 +85,9 @@ const skillLine = (skill: ResolvedSkill) => {
   const optional = skill.optional ? " (optional)" : "";
 
   const executables =
-    skill.executables.length === 0 ? "" : ` (executables: ${skill.executables.join(", ")})`;
+    skill.executables.length === 0
+      ? ""
+      : ` (executables: ${executablesSummary(skill.executables).join(", ")})`;
 
   return `  ${skill.name}  ${origin(skill)}${nested}${optional}${executables}`;
 };

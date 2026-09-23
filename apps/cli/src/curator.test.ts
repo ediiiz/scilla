@@ -192,6 +192,23 @@ describe("check", () => {
     );
   });
 
+  test("names at most 5 executables per skill", async () => {
+    const cwd = plant(temp("curator"), {
+      ...manifestFile("kit"),
+      ...skillAt("skills/big", "big"),
+      ...Object.fromEntries(
+        ["a", "b", "c", "d", "e", "f", "g"].map((name) => [`skills/big/${name}.sh`, ""]),
+      ),
+    });
+
+    const { stdout } = await cli(["check"], { cwd });
+
+    expect(stdout).toContain(
+      "(executables: skills/big/a.sh, skills/big/b.sh, skills/big/c.sh, skills/big/d.sh, " +
+        "skills/big/e.sh, +2 more)\n",
+    );
+  });
+
   test("takes a directory and prints warnings", async () => {
     const dir = plant(temp("curator"), manifestFile("kit", { references: ["./gone"] }));
     const result = await cli(["check", dir]);

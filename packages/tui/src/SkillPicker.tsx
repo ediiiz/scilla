@@ -1,6 +1,6 @@
 import type { ScrollBoxRenderable } from "@opentui/core";
 import { useKeyboard } from "@opentui/react";
-import type { AuditReport, Plan } from "@scilla/core";
+import { executablesSummary, type AuditReport, type Plan } from "@scilla/core";
 import type { CheckboxRootRenderable } from "@tuiparts/core/checkbox";
 import type { CheckboxGroupRenderable } from "@tuiparts/core/checkbox-group";
 import { Checkbox } from "@tuiparts/react/checkbox";
@@ -191,8 +191,8 @@ function DetailPane({ row }: DetailPaneProps) {
       {skill.executables.length === 0 ? null : (
         <box flexDirection="column" marginTop={1}>
           <text fg={WARN}>⚠ contains files that can run code:</text>
-          {skill.executables.map((file) => (
-            <text key={file} fg={WARN} wrapMode="char">{`  ${file}`}</text>
+          {executablesSummary(skill.executables).map((line) => (
+            <text key={line} fg={WARN} wrapMode="char">{`  ${line}`}</text>
           ))}
         </box>
       )}
