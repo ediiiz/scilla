@@ -147,7 +147,7 @@ describe("referenceStatuses and acceptReview", () => {
     await acceptReview(dir, statuses, statuses);
 
     expect(Object.keys((await readReview(dir))?.references ?? {})).toEqual(
-      [moved.url, still.url, fresh.url].toSorted(),
+      [moved.url, still.url, fresh.url].toSorted((a, b) => a.localeCompare(b)),
     );
   });
 

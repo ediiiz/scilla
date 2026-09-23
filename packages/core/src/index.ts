@@ -32,6 +32,8 @@ export { ManifestError, ScillaError, SourceError } from "./errors.ts";
 
 export { Fetcher, probeSource } from "./fetch.ts";
 
+export { detectProvider, openPullRequest, parseRemote, PROVIDERS } from "./forge.ts";
+
 export { fromLockSource, readLock } from "./lock.ts";
 
 export type { CollectionEntry, Lock, Scope, SkillEntry } from "./lock.ts";
@@ -39,6 +41,8 @@ export type { CollectionEntry, Lock, Scope, SkillEntry } from "./lock.ts";
 export { manifestJsonSchema, readManifest, writeManifest } from "./manifest.ts";
 
 export type { Manifest } from "./manifest.ts";
+
+export { commitProposal, originUrl, pushProposal, REVIEW_BRANCH } from "./propose.ts";
 
 export { checkInstalled, restoreLock } from "./restore.ts";
 
