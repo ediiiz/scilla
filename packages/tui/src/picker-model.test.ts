@@ -150,6 +150,40 @@ describe("picker state", () => {
   });
 });
 
+describe("the changes preview", () => {
+  const state = initialPickerState(
+    plan([
+      { name: "same", status: "installed", selected: true },
+      { name: "moved", status: "installed", selected: true, changed: true },
+    ]),
+  );
+
+  test("d opens the preview on the changes of a changed skill", () => {
+    const opened = reducePicker(reducePicker(state, { kind: "focus", index: 1 }), {
+      kind: "preview",
+      open: true,
+      diff: true,
+    });
+
+    expect(opened).toMatchObject({ previewing: true, diffing: true, hint: undefined });
+    expect(reducePicker(opened, { kind: "preview", open: false })).toMatchObject({
+      previewing: false,
+      diffing: false,
+    });
+  });
+
+  test("d on a skill without changes only hints", () => {
+    expect(reducePicker(state, { kind: "preview", open: true, diff: true })).toMatchObject({
+      previewing: false,
+      hint: "no changes since the lock to show",
+    });
+    expect(reducePicker(state, { kind: "preview", open: true })).toMatchObject({
+      previewing: true,
+      diffing: false,
+    });
+  });
+});
+
 describe("pickerIntent", () => {
   test("maps the keys the picker handles itself", () => {
     expect(pickerIntent("j", false)).toEqual({ kind: "move", target: "next" });
@@ -162,6 +196,7 @@ describe("pickerIntent", () => {
     expect(pickerIntent("p", false)).toEqual({ kind: "preview", open: true });
     expect(pickerIntent("right", false)).toEqual({ kind: "preview", open: true });
     expect(pickerIntent("l", false)).toEqual({ kind: "preview", open: true });
+    expect(pickerIntent("d", false)).toEqual({ kind: "preview", open: true, diff: true });
     expect(pickerIntent("space", false)).toBeUndefined();
     expect(pickerIntent("down", false)).toBeUndefined();
   });
@@ -214,6 +249,9 @@ describe("pickerKeyOutcome", () => {
   });
 });
 
+const label = (changed: boolean) =>
+  badgesFor(choice({ name: "a", status: "installed", changed })).map((badge) => badge.label);
+
 describe("display helpers", () => {
   test("badges", () => {
     const labels = badgesFor(
@@ -224,6 +262,11 @@ describe("display helpers", () => {
     expect(
       badgesFor(choice({ name: "b", status: "conflict" })).map((badge) => badge.label),
     ).toEqual(["conflict"]);
+  });
+
+  test("an installed skill that changed upstream says changed instead of installed", () => {
+    expect(label(true)).toEqual(["changed"]);
+    expect(label(false)).toEqual(["installed"]);
   });
 
   test("origin lines shorten hashes but keep `local`", () => {

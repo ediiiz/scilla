@@ -18,6 +18,8 @@ export interface SkillFixture {
   readonly description?: string;
   /** The skill folder on disk; defaults to a path that doesn't exist. */
   readonly dir?: string;
+  /** Its files upstream differ from the lock's. */
+  readonly changed?: boolean;
 }
 
 const COMMIT = "0123456789abcdef0123456789abcdef01234567";
@@ -41,6 +43,7 @@ export const choice = (fixture: SkillFixture): Choice => ({
   status: fixture.status ?? "available",
   selected: fixture.selected ?? false,
   note: fixture.note,
+  changed: fixture.changed,
 });
 
 export const plan = (

@@ -7,6 +7,7 @@ import {
   deleteCollection,
   deleteSkill,
   findCollection,
+  markChanged,
   planInstall,
   type Plan,
 } from "./consumer.ts";
@@ -60,6 +61,30 @@ const kit = () =>
     ...skill("skills/b", "b"),
     ...manifest("Kit", { optional: ["b"] }),
   });
+
+describe("markChanged", () => {
+  test("marks installed skills whose upstream files differ from the lock", async () => {
+    const repo = kit();
+    const target = scope();
+
+    await install(target, repo.url);
+    repo.commit(skill("skills/a", "a", "changed upstream"));
+
+    const marked = await markChanged(await plan(target, repo.url), await readLock(target));
+
+    expect(marked.choices.map((choice) => [choice.skill.name, choice.changed])).toEqual([
+      ["a", true],
+      ["b", undefined],
+    ]);
+
+    const again = await markChanged(
+      await plan(target, `${repo.url}#HEAD~1`),
+      await readLock(target),
+    );
+
+    expect(again.choices.every((choice) => choice.changed !== true)).toBe(true);
+  });
+});
 
 describe("planInstall", () => {
   test("pre-ticks recommended skills and leaves optional ones for a new Collection", async () => {

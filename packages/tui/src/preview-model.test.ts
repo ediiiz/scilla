@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import {
+  diffLines,
   bodyLines,
   collapseTree,
   fileTree,
@@ -190,7 +191,38 @@ describe("scrolling", () => {
       expect(previewIntent(name, false)).toEqual({ kind: "close" });
     }
 
+    expect(previewIntent("d", false)).toEqual({ kind: "toggle-diff" });
     expect(previewIntent("x", false)).toBeUndefined();
+  });
+});
+
+describe("diffLines", () => {
+  test("classifies git's headers, hunks, additions, removals and context", () => {
+    const patch = [
+      "diff --git a/SKILL.md b/SKILL.md",
+      "index 1..2 100644",
+      "--- a/SKILL.md",
+      "+++ b/SKILL.md",
+      "@@ -1,2 +1,2 @@",
+      " same",
+      "-old",
+      "+new\tline",
+      "Binary files /dev/null and b/x.png differ",
+      "",
+    ].join("\n");
+
+    expect(diffLines(patch).map((line) => [line.kind, line.text])).toEqual([
+      ["meta", "diff --git a/SKILL.md b/SKILL.md"],
+      ["meta", "index 1..2 100644"],
+      ["meta", "--- a/SKILL.md"],
+      ["meta", "+++ b/SKILL.md"],
+      ["hunk", "@@ -1,2 +1,2 @@"],
+      ["context", " same"],
+      ["removed", "-old"],
+      ["added", "+new  line"],
+      ["meta", "Binary files /dev/null and b/x.png differ"],
+    ]);
+    expect(diffLines("no newline").map((line) => line.kind)).toEqual(["context"]);
   });
 });
 

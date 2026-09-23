@@ -3,6 +3,7 @@ export {
   deleteCollection,
   deleteSkill,
   findCollection,
+  markChanged,
   planInstall,
 } from "./consumer.ts";
 

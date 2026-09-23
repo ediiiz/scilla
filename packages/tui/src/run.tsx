@@ -1,7 +1,7 @@
 // fallow-ignore-file coverage-gaps -- these wrappers need a real terminal (createCliRenderer); the screens they mount are tested headlessly.
 import { createCliRenderer } from "@opentui/core";
 import { createRoot } from "@opentui/react";
-import type { AuditReport, Plan } from "@scilla/core";
+import type { AuditReport, Choice, Plan } from "@scilla/core";
 import type { ReactNode } from "react";
 import type { HomeAction, HomeContext } from "./home-model.ts";
 import { HomeScreen } from "./HomeScreen.tsx";
@@ -25,12 +25,14 @@ const runScreen = async <T,>(view: (done: (result: T) => void) => ReactNode): Pr
 export interface PickOptions {
   /** Security ratings still being fetched; the rows get badges as soon as they arrive. */
   readonly audit?: Promise<AuditReport> | undefined;
+  /** Loads a changed skill's changes since the lock (a unified diff), shown with `d`. */
+  readonly diff?: ((choice: Choice) => Promise<string>) | undefined;
 }
 
 /** Let the Consumer choose skills from a plan; resolves with the chosen names, or undefined on cancel. */
-export const pickSkills = (plan: Plan, { audit }: PickOptions = {}) =>
+export const pickSkills = (plan: Plan, { audit, diff }: PickOptions = {}) =>
   runScreen<ReadonlySet<string> | undefined>((done) => (
-    <SkillPicker plan={plan} audit={audit} onDone={done} />
+    <SkillPicker plan={plan} audit={audit} diff={diff} onDone={done} />
   ));
 
 /** The bare `scilla` home screen; resolves with what to do next, or undefined on Quit. */

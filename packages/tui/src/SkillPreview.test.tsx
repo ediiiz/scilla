@@ -207,3 +207,58 @@ describe("SkillPreview", () => {
     expect(outcome.value).toBeUndefined();
   });
 });
+
+/** A picker whose alpha changed since the lock, with `diff` loading its changes. */
+const changed = (diff: () => Promise<string>) => {
+  const { done } = reporter<ReadonlySet<string> | undefined>();
+
+  const picked = plan([
+    {
+      name: "alpha",
+      dir: join(root, "alpha"),
+      status: "installed",
+      selected: true,
+      changed: true,
+    },
+    { name: "omega", dir: join(root, "omega"), status: "installed", selected: true },
+  ]);
+
+  return mountScreen(<SkillPicker plan={picked} diff={diff} onDone={done} />, 90, 30);
+};
+
+describe("the changes preview", () => {
+  test("d shows a changed skill's diff, and d again its SKILL.md", async () => {
+    const patch = "diff --git a/SKILL.md b/SKILL.md\n@@ -1 +1 @@\n-old line\n+new line\n";
+    const { frame, press, waitFor } = await changed(() => Promise.resolve(patch));
+
+    expect(frame()).toContain("alpha changed");
+    expect(frame()).toContain("omega installed");
+    expect(frame()).toContain("d changes");
+
+    await press("d");
+    await waitFor("+new line");
+
+    expect(frame()).toContain("Changes since the lock");
+    expect(frame()).toContain("-old line");
+    expect(frame()).toContain("d SKILL.md/changes");
+
+    await press("d");
+    await waitFor("Usage");
+
+    expect(frame()).toContain("SKILL.md");
+    expect(frame()).not.toContain("+new line");
+  });
+
+  test("d on an unchanged skill only hints, and a failed load says why", async () => {
+    const { frame, press, waitFor } = await changed(() => Promise.reject(new Error("boom")));
+
+    await press("j", "d");
+
+    expect(frame()).toContain("no changes since the lock to show");
+
+    await press("k", "d");
+    await waitFor("could not be loaded");
+
+    expect(frame()).toContain("The changes could not be loaded: boom");
+  });
+});

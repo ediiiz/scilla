@@ -7,6 +7,7 @@ import { loadPreview, type PreviewFiles } from "./preview-files.ts";
 import {
   bodyLines,
   collapseTree,
+  diffLines,
   fileTree,
   frontmatterLines,
   inlineSegments,
@@ -15,13 +16,18 @@ import {
   scrollOffset,
   splitFrontmatter,
   type BodyLine,
+  type DiffLineKind,
 } from "./preview-model.ts";
-import { ACCENT, MUTED, TEXT, WARN } from "./theme.ts";
+import { ACCENT, MUTED, TEXT, toneColor, WARN } from "./theme.ts";
 
 export interface SkillPreviewProps {
   readonly choice: Choice;
   /** Back to the list; the picker keeps its focus and ticks. */
   readonly onClose: () => void;
+  /** Loads the skill's changes since the lock (a unified diff); undefined when it has none. */
+  readonly loadDiff?: (() => Promise<string>) | undefined;
+  /** Open on the changes rather than SKILL.md (`d` in the list). */
+  readonly showDiff?: boolean | undefined;
 }
 
 /** Width of the file tree column; leaves the SKILL.md pane about 48 columns at 80 wide. */
@@ -39,6 +45,76 @@ function Rule() {
 }
 
 const KEY_HELP = "↑↓/jk scroll · pgup/pgdn page · g/G top/bottom · esc/←/q back";
+
+const DIFF_KEY_HELP = `d SKILL.md/changes · ${KEY_HELP}`;
+
+const DIFF_COLORS: Readonly<Record<DiffLineKind, string>> = {
+  added: toneColor("good"),
+  removed: toneColor("danger"),
+  hunk: ACCENT,
+  meta: MUTED,
+  context: TEXT,
+};
+
+interface ChangesProps {
+  readonly text: string | undefined;
+  readonly scroll: RefObject<ScrollBoxRenderable | null>;
+}
+
+/** The skill's changes since the lock, coloured like `scilla diff` on a terminal. */
+function ChangesPane({ text, scroll }: ChangesProps) {
+  return (
+    <box
+      border
+      borderColor={MUTED}
+      title=" Changes since the lock "
+      flexGrow={1}
+      flexDirection="column"
+      paddingX={1}
+    >
+      {text === undefined ? (
+        <text fg={MUTED}>Loading…</text>
+      ) : (
+        <scrollbox ref={scroll} flexGrow={1} flexBasis={0}>
+          {diffLines(text).map((line) => (
+            <text key={line.line} fg={DIFF_COLORS[line.kind]} wrapMode="char">
+              {line.text === "" ? " " : line.text}
+            </text>
+          ))}
+        </scrollbox>
+      )}
+    </box>
+  );
+}
+
+/** Load the changes the first time they're shown; undefined while they load. */
+const useChanges = (loadDiff: (() => Promise<string>) | undefined, shown: boolean) => {
+  const [text, setText] = useState<string | undefined>(undefined);
+  const wanted = shown && loadDiff !== undefined && text === undefined;
+
+  useEffect(() => {
+    let live = true;
+
+    if (wanted) {
+      void loadDiff()
+        .catch(
+          (cause) =>
+            `The changes could not be loaded: ${cause instanceof Error ? cause.message : String(cause)}`,
+        )
+        .then((loaded) => {
+          if (live) {
+            setText(loaded === "" ? "(no changes)" : loaded);
+          }
+        });
+    }
+
+    return () => {
+      live = false;
+    };
+  }, [wanted, loadDiff]);
+
+  return text;
+};
 
 const inlineSpans = (text: string): ReactNode[] =>
   inlineSegments(text).map((segment, index) => {
@@ -250,9 +326,11 @@ const usePreviewFiles = (dir: string) => {
 };
 
 /** A full-screen look at one skill: origin, SKILL.md and its files. Every key stops here. */
-export function SkillPreview({ choice, onClose }: SkillPreviewProps) {
+export function SkillPreview({ choice, onClose, loadDiff, showDiff }: SkillPreviewProps) {
   const loaded = usePreviewFiles(choice.skill.dir);
   const scroll = useRef<ScrollBoxRenderable>(null);
+  const [diffing, setDiffing] = useState(showDiff === true && loadDiff !== undefined);
+  const changes = useChanges(loadDiff, diffing);
 
   // Registered after the picker's own handlers, and keeps the hidden list's Checkbox from the key.
   useKeyboard((key) => {
@@ -263,6 +341,8 @@ export function SkillPreview({ choice, onClose }: SkillPreviewProps) {
 
     if (intent?.kind === "close") {
       onClose();
+    } else if (intent?.kind === "toggle-diff") {
+      setDiffing((current) => loadDiff !== undefined && !current);
     } else if (intent !== undefined && box !== null) {
       box.scrollTop = scrollOffset(
         box.scrollTop,
@@ -278,11 +358,15 @@ export function SkillPreview({ choice, onClose }: SkillPreviewProps) {
     <box flexDirection="column" width="100%" height="100%" paddingX={1}>
       <PreviewHeading choice={choice} />
       <box flexDirection="row" flexGrow={1} gap={1}>
-        <DocumentPane loaded={loaded} scroll={scroll} />
+        {diffing ? (
+          <ChangesPane text={changes} scroll={scroll} />
+        ) : (
+          <DocumentPane loaded={loaded} scroll={scroll} />
+        )}
         <FilesPane loaded={loaded} executables={choice.skill.executables} />
       </box>
       <text fg={MUTED} flexShrink={0} wrapMode="none" truncate>
-        {KEY_HELP}
+        {loadDiff === undefined ? KEY_HELP : DIFF_KEY_HELP}
       </text>
     </box>
   );

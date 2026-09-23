@@ -1,16 +1,21 @@
 import {
   applyPlan,
+  diffSkill,
   executablesSummary,
   Fetcher,
   findCollection,
   formatSource,
   fromLockSource,
+  lockedSkillDir,
+  markChanged,
   parseSource,
   planInstall,
   readLock,
   ScillaError,
   traverse,
   type AuditReport,
+  type Choice,
+  type Lock,
   type Plan,
   type Scope,
   type Source,
@@ -45,15 +50,30 @@ const session = (io: Io, flags: InstallFlags): Session => ({
 /** With `--yes` or without a terminal, the picker stays closed and the pre-ticked choices apply. */
 const unattended = (current: Session) => current.flags.yes || !current.io.interactive;
 
+/** A changed skill's changes since the lock, for the picker's `d`. */
+const changesOf = async (current: Session, lock: Lock, choice: Choice) => {
+  const entry = lock.skills[choice.skill.name];
+
+  if (entry === undefined) {
+    return "";
+  }
+
+  const before = await lockedSkillDir(current.scope, choice.skill.name, entry, current.fetcher);
+
+  return (await diffSkill(before, choice.skill.dir)).patch;
+};
+
 /** Open the picker, which shows the ratings as they arrive; unattended, take the pre-ticked choices. */
-const pick = (current: Session, plan: Plan, audit: Promise<AuditReport>) => {
+const pick = (current: Session, plan: Plan, lock: Lock, audit: Promise<AuditReport>) => {
   if (unattended(current)) {
     return Promise.resolve<ReadonlySet<string>>(
       new Set(plan.choices.flatMap((choice) => (choice.selected ? [choice.skill.name] : []))),
     );
   }
 
-  return current.io.tui.pickSkills(plan, { audit });
+  const diff = (choice: Choice) => changesOf(current, lock, choice);
+
+  return current.io.tui.pickSkills(plan, { audit, diff });
 };
 
 const warnExecutables = (reporter: Reporter, plan: Plan, selected: ReadonlySet<string>) => {
@@ -80,9 +100,9 @@ const installFrom = async (current: Session, source: Source): Promise<Picked | u
   );
 
   const lock = await readLock(current.scope);
-  const plan = planInstall(traversal, lock, current.flags.all);
+  const plan = await markChanged(planInstall(traversal, lock, current.flags.all), lock);
   const ratings = startAudit(io, traversal.skills, current.flags.audit);
-  const selected = await pick(current, plan, ratings);
+  const selected = await pick(current, plan, lock, ratings);
 
   if (selected === undefined) {
     return undefined;

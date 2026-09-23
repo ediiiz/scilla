@@ -26,6 +26,8 @@ export interface PickerState {
   readonly hint: string | undefined;
   /** Whether the focused row's full-screen preview is open; focus and ticks stay as they are. */
   readonly previewing: boolean;
+  /** The preview opened on the skill's changes since the lock (`d`) rather than its SKILL.md. */
+  readonly diffing: boolean;
 }
 
 /**
@@ -38,7 +40,7 @@ export type PickerAction =
   | { readonly kind: "select"; readonly names: readonly string[] }
   | { readonly kind: "toggle-all" }
   | { readonly kind: "refuse" }
-  | { readonly kind: "preview"; readonly open: boolean };
+  | { readonly kind: "preview"; readonly open: boolean; readonly diff?: boolean };
 
 export type MoveTarget = "next" | "previous" | "first" | "last";
 
@@ -46,7 +48,7 @@ export type MoveTarget = "next" | "previous" | "first" | "last";
 export type PickerIntent =
   | { readonly kind: "move"; readonly target: MoveTarget }
   | { readonly kind: "toggle-all" }
-  | { readonly kind: "preview"; readonly open: true }
+  | { readonly kind: "preview"; readonly open: true; readonly diff?: boolean }
   | { readonly kind: "confirm" }
   | { readonly kind: "cancel" };
 
@@ -90,7 +92,7 @@ export const initialPickerState = (plan: Plan): PickerState => {
   }
 
   // The CheckboxGroup's tab stop starts on the first row, conflict or not.
-  return { groups, rows, focus: 0, selected, hint: undefined, previewing: false };
+  return { groups, rows, focus: 0, selected, hint: undefined, previewing: false, diffing: false };
 };
 
 const selectableNames = (state: PickerState) =>
@@ -113,6 +115,21 @@ export const clashNote = (choice: Choice) =>
   choice.note ?? "a skill with this name is already installed";
 
 const refusal = (row: PickerRow) => `can't select: ${clashNote(row.choice)}`;
+
+const NO_CHANGES = "no changes since the lock to show";
+
+/** Open or close the preview; `d` opens it on the changes, only for a skill that has some. */
+const preview = (state: PickerState, open: boolean, diff: boolean): PickerState => {
+  if (state.rows.length === 0) {
+    return state;
+  }
+
+  if (open && diff && state.rows[state.focus]?.choice.changed !== true) {
+    return { ...state, hint: NO_CHANGES };
+  }
+
+  return { ...state, previewing: open, diffing: open && diff, hint: undefined };
+};
 
 export const reducePicker = (state: PickerState, action: PickerAction): PickerState => {
   switch (action.kind) {
@@ -139,9 +156,7 @@ export const reducePicker = (state: PickerState, action: PickerAction): PickerSt
     }
 
     case "preview": {
-      return state.rows.length === 0
-        ? state
-        : { ...state, previewing: action.open, hint: undefined };
+      return preview(state, action.open, action.diff === true);
     }
 
     default: {
@@ -200,6 +215,10 @@ export const pickerIntent = (name: string, ctrl: boolean): PickerIntent | undefi
 
   if (PREVIEW_KEYS.has(name)) {
     return { kind: "preview", open: true };
+  }
+
+  if (name === "d") {
+    return { kind: "preview", open: true, diff: true };
   }
 
   if (name === "return" || name === "enter") {
@@ -265,7 +284,11 @@ export const badgesFor = (choice: Choice): Badge[] => {
   }
 
   if (choice.status === "installed") {
-    badges.push({ label: "installed", tone: "muted" });
+    badges.push(
+      choice.changed === true
+        ? { label: "changed", tone: "accent" }
+        : { label: "installed", tone: "muted" },
+    );
   }
 
   if (choice.skill.executables.length > 0) {

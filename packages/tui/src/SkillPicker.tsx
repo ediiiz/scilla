@@ -1,11 +1,11 @@
 import type { ScrollBoxRenderable } from "@opentui/core";
 import { useKeyboard } from "@opentui/react";
-import { executablesSummary, type AuditReport, type Plan } from "@scilla/core";
+import { executablesSummary, type AuditReport, type Choice, type Plan } from "@scilla/core";
 import type { CheckboxRootRenderable } from "@tuiparts/core/checkbox";
 import type { CheckboxGroupRenderable } from "@tuiparts/core/checkbox-group";
 import { Checkbox } from "@tuiparts/react/checkbox";
 import { CheckboxGroup } from "@tuiparts/react/checkbox-group";
-import { useCallback, useEffect, useRef, useState, type RefObject } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type RefObject } from "react";
 import {
   descriptionText,
   initialPickerState,
@@ -33,6 +33,8 @@ export interface SkillPickerProps {
   readonly audit?: Promise<AuditReport> | undefined;
   /** Called once: the chosen skill names, or undefined when the Consumer cancels. */
   readonly onDone: (selection: ReadonlySet<string> | undefined) => void;
+  /** Loads a changed skill's changes since the lock (a unified diff), for `d`. */
+  readonly diff?: ((choice: Choice) => Promise<string>) | undefined;
 }
 
 const rowId = (name: string) => `skill-row-${name}`;
@@ -202,6 +204,9 @@ function DetailPane({ row }: DetailPaneProps) {
 
 const KEY_HELP = "↑↓/jk move · space toggle · a all · p preview · enter confirm · esc cancel";
 
+const DIFF_KEY_HELP =
+  "↑↓/jk move · space toggle · a all · p preview · d changes · enter confirm · esc cancel";
+
 /** The picker's own keys; see `pickerKeyOutcome`. */
 const usePickerKeys = (
   latest: RefObject<PickerState>,
@@ -225,13 +230,22 @@ const usePickerKeys = (
   });
 };
 
-export function SkillPicker({ plan, audit, onDone }: SkillPickerProps) {
+export function SkillPicker({ plan, audit, onDone, diff }: SkillPickerProps) {
   const [state, setState] = useState(() => initialPickerState(plan));
   const ratings = useAuditRatings(audit);
   // Keys can arrive faster than React renders; confirm must see every toggle before it.
   const latest = useRef(state);
   const notices = noticeLines(plan);
   const focused = state.rows[state.focus];
+  const focusedChoice = focused?.choice;
+  const diffable = diff !== undefined && plan.choices.some((choice) => choice.changed === true);
+
+  // One loader per focused skill, so the preview loads its changes once.
+  const loadDiff = useMemo(
+    () =>
+      diff === undefined || focusedChoice?.changed !== true ? undefined : () => diff(focusedChoice),
+    [diff, focusedChoice],
+  );
 
   const dispatch = useCallback((action: PickerAction) => {
     latest.current = reducePicker(latest.current, action);
@@ -281,12 +295,14 @@ export function SkillPicker({ plan, audit, onDone }: SkillPickerProps) {
           </box>
         )}
         <text fg={state.hint === undefined ? MUTED : WARN} flexShrink={0} wrapMode="none" truncate>
-          {state.hint ?? KEY_HELP}
+          {state.hint ?? (diffable ? DIFF_KEY_HELP : KEY_HELP)}
         </text>
       </box>
       {state.previewing && focused !== undefined ? (
         <SkillPreview
           choice={focused.choice}
+          loadDiff={loadDiff}
+          showDiff={state.diffing}
           onClose={() => dispatch({ kind: "preview", open: false })}
         />
       ) : null}

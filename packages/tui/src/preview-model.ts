@@ -313,6 +313,7 @@ export const scrollOffset = (top: number, move: ScrollMove, content: number, vie
 
 export type PreviewIntent =
   | { readonly kind: "close" }
+  | { readonly kind: "toggle-diff" }
   | { readonly kind: "scroll"; readonly move: ScrollMove };
 
 const CLOSE_KEYS = new Set(["escape", "left", "h", "q"]);
@@ -335,6 +336,10 @@ const SCROLL_KEYS: ReadonlyMap<string, ScrollMove> = new Map([
 export const previewIntent = (name: string, shift: boolean): PreviewIntent | undefined => {
   if (CLOSE_KEYS.has(name)) {
     return { kind: "close" };
+  }
+
+  if (name === "d") {
+    return { kind: "toggle-diff" };
   }
 
   const move = name === "g" && shift ? "bottom" : SCROLL_KEYS.get(name);
@@ -372,3 +377,40 @@ export const frontmatterLines = (fields: readonly FrontmatterField[]) => {
 
   return fields.map((field) => ({ key: field.key.padEnd(width), value: field.value }));
 };
+
+export type DiffLineKind = "added" | "removed" | "hunk" | "meta" | "context";
+
+/** One line of a unified diff, classified for colouring. */
+export interface DiffLine {
+  /** The line number in the diff, unique within it. */
+  readonly line: number;
+  readonly kind: DiffLineKind;
+  readonly text: string;
+}
+
+/** git's header lines: which files, their modes and hashes, and binary notes. */
+const DIFF_META =
+  /^(?:diff --git |index |--- |\+\+\+ |new file|deleted file|old mode|new mode|similarity|rename |Binary files )/;
+
+const diffKind = (text: string): DiffLineKind => {
+  if (DIFF_META.test(text)) {
+    return "meta";
+  }
+
+  if (text.startsWith("@@")) {
+    return "hunk";
+  }
+
+  if (text.startsWith("+")) {
+    return "added";
+  }
+
+  return text.startsWith("-") ? "removed" : "context";
+};
+
+/** Classify each line of a unified diff; tabs become two spaces, as in code blocks. */
+export const diffLines = (patch: string): DiffLine[] =>
+  patch
+    .split("\n")
+    .slice(0, patch.endsWith("\n") ? -1 : undefined)
+    .map((text, line) => ({ line, kind: diffKind(text), text: text.replaceAll("\t", "  ") }));

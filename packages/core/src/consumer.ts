@@ -22,6 +22,8 @@ export interface Choice {
   /** Pre-ticked in the picker. */
   readonly selected: boolean;
   readonly note: string | undefined;
+  /** An installed skill whose files upstream differ from the lock's (see `markChanged`). */
+  readonly changed?: boolean | undefined;
 }
 
 export interface Plan {
@@ -101,6 +103,29 @@ export const planInstall = (traversal: Traversal, lock: Lock, all = false): Plan
     choices: traversal.skills.map((skill) => choiceFor(skill, lock, key, all)),
     removed: previous.filter((name) => !available.has(name)),
   };
+};
+
+/**
+ * Mark the installed choices whose upstream files differ from what the lock recorded, so the
+ * picker can say which skills an update changes. Other choices are left as they are.
+ */
+export const markChanged = async (plan: Plan, lock: Lock): Promise<Plan> => {
+  const choices = await Promise.all(
+    plan.choices.map(async (choice) => {
+      const entry = lock.skills[choice.skill.name];
+
+      if (choice.status !== "installed" || entry === undefined) {
+        return choice;
+      }
+
+      return {
+        ...choice,
+        changed: (await computeSkillHash(choice.skill.dir)) !== entry.computedHash,
+      };
+    }),
+  );
+
+  return { ...plan, choices };
 };
 
 const union = (list: readonly string[] | undefined, item: string) =>

@@ -211,6 +211,34 @@ describe("update", () => {
     expect(installed(cwd, "two")).toBe(false);
   });
 
+  test("on a terminal the picker marks changed skills and can show their changes", async () => {
+    const repo = remote();
+    const cwd = temp("project");
+
+    await cli(["add", repo.url], { cwd });
+    repo.commit({ "skills/one/notes.md": "more\n" });
+
+    const shown: string[] = [];
+
+    const result = await cli(["update"], {
+      cwd,
+      interactive: true,
+      pickSkills: async (plan, options) => {
+        const [one] = plan.choices;
+
+        shown.push(one === undefined ? "" : await (options?.diff?.(one) ?? ""));
+
+        return new Set(["one"]);
+      },
+    });
+
+    expect(result.plans[0]?.choices.map((choice) => [choice.skill.name, choice.changed])).toEqual([
+      ["one", true],
+    ]);
+    expect(shown[0]).toContain("+more\n");
+    expect(result.stdout).toContain("Updated: one");
+  });
+
   test("on a terminal the picker can opt into new skills", async () => {
     const repo = remote();
     const cwd = temp("project");

@@ -33,6 +33,7 @@ test("the barrel exposes the public API", () => {
     "initCollection",
     "lockedSkillDir",
     "manifestJsonSchema",
+    "markChanged",
     "newOwnSkill",
     "openPullRequest",
     "originUrl",
