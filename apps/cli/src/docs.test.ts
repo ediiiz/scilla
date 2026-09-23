@@ -111,7 +111,7 @@ describe("the docs stay in step with the code", () => {
       expect(attempt).not.toThrow("Unknown command");
     }
 
-    const inHelp = [...HELP.matchAll(/^ {2}scilla ([a-z]+(?: (?:add|new))?)/gm)].map(
+    const inHelp = [...HELP.matchAll(/^ {2}scilla ([a-z]+(?: (?:add|new|accept|propose))?)/gm)].map(
       (match) => match[1],
     );
 

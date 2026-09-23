@@ -52,7 +52,7 @@ export const commandFor = (action: HomeAction): Command => {
 };
 
 /** Bare `scilla`: the home screen on a terminal, otherwise the help text. */
-export const home = async (io: Io, run: (command: Command) => Promise<void>) => {
+export const home = async (io: Io, run: (command: Command) => Promise<number | void>) => {
   if (!io.interactive) {
     io.stdout.write(HELP);
 
@@ -72,7 +72,5 @@ export const home = async (io: Io, run: (command: Command) => Promise<void>) => 
     collectionName: manifest?.name,
   });
 
-  if (action !== undefined) {
-    await run(commandFor(action));
-  }
+  return action === undefined ? undefined : run(commandFor(action));
 };

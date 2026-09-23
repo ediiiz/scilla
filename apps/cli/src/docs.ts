@@ -9,6 +9,7 @@ import sources from "../docs/sources.md" with { type: "text" };
 import start from "../docs/start.md" with { type: "text" };
 import packageJson from "../package.json" with { type: "json" };
 import type { Io } from "./io.ts";
+import { paint, wantsStyle } from "./report.ts";
 
 /** The docs topics, in reading order. */
 export const TOPICS = [
@@ -99,22 +100,18 @@ const everything = () => {
   return [header, ...topics].join("\n");
 };
 
-const BOLD_ACCENT = "\u001B[1;36m";
-
-const DIM = "\u001B[2m";
-
-const RESET = "\u001B[0m";
+const style = paint(true);
 
 /** Light terminal styling: bold, accent-coloured headings (without the `#`s) and dimmed fences. */
 const styled = (markdown: string) =>
   mapLines(markdown, (line, kind) => {
     switch (kind) {
       case "heading": {
-        return `${BOLD_ACCENT}${line.replace(/^#+ /, "")}${RESET}`;
+        return style(line.replace(/^#+ /, ""), "heading");
       }
 
       case "fence": {
-        return `${DIM}${line}${RESET}`;
+        return style(line, "dim");
       }
 
       default: {
@@ -140,10 +137,6 @@ const markdownFor = (topic: string | undefined) => {
 
   return found.text;
 };
-
-/** Style only for a person at a terminal: not with `--raw`, a pipe, or `NO_COLOR`. */
-const wantsStyle = (io: Io, raw: boolean) =>
-  !raw && io.stdout.isTTY === true && (io.env["NO_COLOR"] ?? "") === "";
 
 /** `scilla docs [topic] [--raw]`: the topic index, one topic, `all` of them, or the manifest `schema`. */
 export const docs = (io: Io, topic: string | undefined, raw: boolean) => {

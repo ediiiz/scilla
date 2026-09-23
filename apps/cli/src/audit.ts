@@ -9,7 +9,7 @@ import {
   type Unaudited,
 } from "@scilla/core";
 import { scopeFor, type Io } from "./io.ts";
-import { Reporter, where } from "./report.ts";
+import { Reporter, table, where } from "./report.ts";
 
 /** Ratings that make an attended install ask before going ahead. */
 const RISKY: ReadonlySet<Risk> = new Set(["medium", "high", "critical"]);
@@ -43,16 +43,6 @@ const cell = (audit: SkillAudit | undefined, label: string) => {
   return alerts > 0 ? `${provider.risk} (${alerts} alerts)` : provider.risk;
 };
 
-const padded = (rows: readonly (readonly string[])[]) => {
-  const widths = (rows[0] ?? []).map((_, column) =>
-    Math.max(...rows.map((row) => row[column]?.length ?? 0)),
-  );
-
-  return rows.map((row) =>
-    `  ${row.map((text, column) => text.padEnd(widths[column] ?? 0)).join("  ")}`.trimEnd(),
-  );
-};
-
 /** The "Security risk assessments" table for `names`: one row each, `--` where there's no rating. */
 export const auditTable = (names: readonly string[], audits: ReadonlyMap<string, SkillAudit>) => {
   const rated = names.flatMap((name) => {
@@ -67,7 +57,7 @@ export const auditTable = (names: readonly string[], audits: ReadonlyMap<string,
 
   return [
     "Security risk assessments",
-    ...padded([["Skill", ...columns], ...names.map((name) => row(name))]),
+    ...table([["Skill", ...columns], ...names.map((name) => row(name))]),
     ...details.map((url) => `  Details: ${url}`),
   ];
 };

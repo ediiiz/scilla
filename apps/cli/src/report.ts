@@ -75,3 +75,35 @@ export const printOutcome = (reporter: Reporter, outcome: Outcome) => {
 
   reporter.warnAll(outcome.warnings);
 };
+
+/** Rows of cells as lines: each column padded to its widest cell, indented by two spaces. */
+export const table = (rows: readonly (readonly string[])[]) => {
+  const widths = (rows[0] ?? []).map((_, column) =>
+    Math.max(...rows.map((row) => row[column]?.length ?? 0)),
+  );
+
+  return rows.map((row) =>
+    `  ${row.map((text, column) => text.padEnd(widths[column] ?? 0)).join("  ")}`.trimEnd(),
+  );
+};
+
+/** Style only for a person at a terminal: not with `--raw`, a pipe, or `NO_COLOR`. */
+export const wantsStyle = (io: Io, raw: boolean) =>
+  !raw && io.stdout.isTTY === true && (io.env["NO_COLOR"] ?? "") === "";
+
+const STYLES = {
+  heading: "\u001B[1;36m",
+  bold: "\u001B[1m",
+  dim: "\u001B[2m",
+  added: "\u001B[32m",
+  removed: "\u001B[31m",
+  warn: "\u001B[33m",
+} as const;
+
+export type Style = keyof typeof STYLES;
+
+const RESET = "\u001B[0m";
+
+/** Wrap text in a terminal style, or leave it plain when `styled` is false. */
+export const paint = (styled: boolean) => (text: string, style: Style) =>
+  styled ? `${STYLES[style]}${text}${RESET}` : text;

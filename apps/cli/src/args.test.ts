@@ -132,7 +132,71 @@ describe("parseCommand", () => {
     expect(parseCommand(["check", "../kit"])).toEqual({ kind: "check", dir: "../kit" });
   });
 
+  test("install, outdated and diff", () => {
+    expect(parseCommand(["install"])).toEqual({
+      kind: "install",
+      global: false,
+      force: false,
+      frozen: false,
+      check: false,
+    });
+    expect(parseCommand(["install", "-g", "--frozen", "--check", "--force"])).toEqual({
+      kind: "install",
+      global: true,
+      force: true,
+      frozen: true,
+      check: true,
+    });
+    expect(parseCommand(["outdated", "-g"])).toEqual({ kind: "outdated", global: true });
+    expect(parseCommand(["diff", "kit", "--raw", "--no-audit"])).toEqual({
+      kind: "diff",
+      target: "kit",
+      global: false,
+      raw: true,
+      audit: false,
+    });
+  });
+
+  test("review accept and review propose", () => {
+    expect(parseCommand(["review", "accept"])).toEqual({
+      kind: "review-accept",
+      reference: undefined,
+    });
+    expect(parseCommand(["review", "accept", "acme/skills"])).toEqual({
+      kind: "review-accept",
+      reference: "acme/skills",
+    });
+    expect(
+      parseCommand([
+        "review",
+        "propose",
+        "--open",
+        "--provider",
+        "forgejo",
+        "--title-file",
+        "t.txt",
+        "--body-file",
+        "b.md",
+      ]),
+    ).toEqual({
+      kind: "review-propose",
+      open: true,
+      provider: "forgejo",
+      titleFile: "t.txt",
+      bodyFile: "b.md",
+      audit: true,
+    });
+  });
+
   test.each([
+    [["install", "acme/skills"], "To add a Collection, run: scilla add acme/skills"],
+    [["outdated", "x"], "usage: scilla outdated [-g]"],
+    [["diff", "a", "b"], "usage: scilla diff [collection|skill]"],
+    [["review"], "usage: scilla review accept [reference]"],
+    [["review", "accept", "a", "b"], "usage: scilla review accept [reference]"],
+    [["review", "propose", "x"], "usage: scilla review propose [--open]"],
+    [["review", "propose", "--provider", "bitbucket"], "provider"],
+    [["review", "propose", "--body-file", ""], "--body-file needs a path"],
     [["add"], "usage: scilla add <source>"],
     [["add", "a", "b"], "usage: scilla add <source>"],
     [["update", "a", "b"], "usage: scilla update"],

@@ -88,10 +88,17 @@ export const gitFixture = (tree: Tree) => {
     runGit(dir, ["commit", "--quiet", "--allow-empty", "-m", "fixture"]);
   };
 
+  /** Rewrite the last commit with `more`, as a force-push upstream would. */
+  const amend = (more: Tree) => {
+    plant(dir, more);
+    runGit(dir, ["add", "--all"]);
+    runGit(dir, ["commit", "--quiet", "--amend", "-m", "fixture (rewritten)"]);
+  };
+
   runGit(dir, ["init", "--quiet", "--initial-branch=main"]);
   commit({});
 
-  return { dir, url: `file://${dir}`, commit };
+  return { dir, url: `file://${dir}`, commit, amend };
 };
 
 /**
