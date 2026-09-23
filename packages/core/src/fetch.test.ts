@@ -51,6 +51,42 @@ describe("Fetcher", () => {
     expect(a).toEqual(b);
   });
 
+  test("checkoutCommit uses a cached checkout or mirror before fetching anything", async () => {
+    const repo = new Repo(skill("s", "s"));
+    const first = repo.head();
+    const second = repo.commit(skill("t", "t"));
+    const cacheDir = tempDir("cache");
+    const origin = source(repo.url);
+
+    await new Fetcher(cacheDir).checkout(origin);
+    rmSync(repo.dir, { recursive: true, force: true });
+
+    // The repo is gone: the mirror (for `first`) and the checkout (for `second`) must do.
+    const old = await new Fetcher(cacheDir).checkoutCommit(origin, first);
+    const known = await new Fetcher(cacheDir).checkoutCommit(origin, second);
+
+    expect(old.commit).toBe(first);
+    expect(existsSync(join(old.root, "t"))).toBe(false);
+    expect(existsSync(join(known.root, "t", "SKILL.md"))).toBe(true);
+  });
+
+  test("checkoutCommit fetches a commit the cache lacks and reads local folders in place", async () => {
+    const repo = new Repo(skill("s", "s"));
+    const cacheDir = tempDir("cache");
+
+    await new Fetcher(cacheDir).checkout(source(repo.url));
+
+    const later = repo.commit(skill("t", "t"));
+    const checkout = await new Fetcher(cacheDir).checkoutCommit(source(repo.url), later);
+    const dir = tempDir();
+
+    expect(checkout.commit).toBe(later);
+    expect(await fetcher().checkoutCommit(source(dir), "local")).toEqual({
+      root: dir,
+      commit: "local",
+    });
+  });
+
   test("reads local sources in place", async () => {
     const dir = tempDir();
 

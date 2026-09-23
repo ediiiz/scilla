@@ -194,6 +194,13 @@ const readSkillsLock = async (file: string): Promise<SkillsLock | undefined> => 
   }
 };
 
+/** The skill names the project's skills-lock.json lists; none when it's missing or unreadable. */
+export const skillsLockNames = async (scope: Scope) => {
+  const current = await readSkillsLock(join(scope.base, "skills-lock.json"));
+
+  return Object.keys(current?.skills ?? {});
+};
+
 // No `ref` is written: scilla's Pins live on References, and the skills CLI would read one as its own.
 const skillsLockEntry = (scope: Scope, entry: SkillEntry) => {
   const skillPath = entry.path === "" ? "SKILL.md" : `${entry.path}/SKILL.md`;

@@ -109,6 +109,15 @@ export class Repo {
     return this.head();
   }
 
+  /** Rewrite the last commit with `files` (a force-push upstream); returns the new commit SHA. */
+  amend(files: Files) {
+    writeFiles(this.dir, files);
+    git(this.dir, "add", "--all");
+    git(this.dir, "commit", "--quiet", "--amend", "--message", "fixture (rewritten)");
+
+    return this.head();
+  }
+
   head() {
     return git(this.dir, "rev-parse", "HEAD");
   }

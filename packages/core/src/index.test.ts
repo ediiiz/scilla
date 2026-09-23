@@ -11,6 +11,7 @@ test("the barrel exposes the public API", () => {
     "addReference",
     "applyPlan",
     "auditSkills",
+    "checkInstalled",
     "deleteCollection",
     "deleteSkill",
     "envValue",
@@ -26,6 +27,7 @@ test("the barrel exposes the public API", () => {
     "probeSource",
     "readLock",
     "readManifest",
+    "restoreLock",
     "traverse",
     "writeManifest",
   ]);

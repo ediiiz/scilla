@@ -38,6 +38,8 @@ export { manifestJsonSchema, readManifest, writeManifest } from "./manifest.ts";
 
 export type { Manifest } from "./manifest.ts";
 
+export { checkInstalled, restoreLock } from "./restore.ts";
+
 export { formatSource, parseSource } from "./source.ts";
 
 export type { Source } from "./source.ts";

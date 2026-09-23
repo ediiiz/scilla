@@ -5,6 +5,7 @@ import { homedir } from "node:os";
 import { join } from "node:path";
 import { envValue } from "./env.ts";
 import { detailOf, messageOf, ScillaError } from "./errors.ts";
+import { git, gitError, runGit } from "./git.ts";
 import type { Source } from "./source.ts";
 
 /** A source's repo materialised on disk at one commit. */
@@ -47,79 +48,10 @@ const makeTaggedDir = async (dir: string) => {
 // A cache directory name, not a security boundary; 32 hex digits keep paths short.
 const key = (url: string) => createHash("sha256").update(url).digest("hex").slice(0, 32);
 
-/**
- * Run git and collect its output. With a `timeout` (ms), git is killed when it runs longer; the
- * result is then marked `timedOut` without waiting for output that a lingering child (such as an
- * ssh command) may still hold open.
- */
-const run = async (args: readonly string[], cwd: string, timeout?: number) => {
-  const child = Bun.spawn(["git", ...args], {
-    cwd,
-    stdout: "pipe",
-    stderr: "pipe",
-    env: { ...process.env, GIT_TERMINAL_PROMPT: "0" },
-  });
-
-  let timedOut = false;
-
-  const timer =
-    timeout === undefined
-      ? undefined
-      : setTimeout(() => {
-          timedOut = true;
-          child.kill("SIGKILL");
-        }, timeout);
-
-  const output = Promise.all([
-    new Response(child.stdout).text(),
-    new Response(child.stderr).text(),
-  ]);
-
-  const code = await child.exited;
-
-  clearTimeout(timer);
-
-  if (timedOut) {
-    return { stdout: "", stderr: "", code, timedOut };
-  }
-
-  const [stdout, stderr] = await output;
-
-  return { stdout, stderr, code, timedOut: false };
-};
-
-/**
- * The most useful line of git's stderr: its first `fatal:` line (the specific one, such as "does
- * not appear to be a git repository", before the generic "Could not read from remote
- * repository."), else its first non-empty line.
- */
-const gitSummary = (stderr: string) => {
-  const lines = stderr.split("\n").flatMap((line) => (line.trim() === "" ? [] : [line.trim()]));
-
-  return lines.find((line) => line.startsWith("fatal:")) ?? lines[0];
-};
-
-const gitError = (args: readonly string[], stderr: string, code: number) => {
-  const detail = stderr.trim();
-
-  return new ScillaError(
-    `git ${args[0] ?? ""} failed: ${gitSummary(stderr) ?? `exit ${code}`}`,
-    detail === "" ? undefined : detail,
-  );
-};
-
-const git = async (args: readonly string[], cwd = process.cwd()) => {
-  const { stdout, stderr, code } = await run(args, cwd);
-
-  if (code !== 0) {
-    throw gitError(args, stderr, code);
-  }
-
-  return stdout.trim();
-};
-
 // A full commit SHA (or an abbreviation) can't be matched by `ls-remote`, which lists refs only.
 const COMMIT_SHA = /^[0-9a-f]{7,40}$/i;
+
+const FULL_SHA = /^(?:[0-9a-f]{40}|[0-9a-f]{64})$/;
 
 const PROBE_TIMEOUT_MS = 10_000;
 
@@ -142,7 +74,7 @@ export const probeSource = async (
 
   const ref = source.ref === undefined || COMMIT_SHA.test(source.ref) ? [] : [source.ref];
   const args = ["ls-remote", "--exit-code", "--", source.url, ...ref];
-  const { stderr, code, timedOut } = await run(args, process.cwd(), timeout);
+  const { stderr, code, timedOut } = await runGit(args, process.cwd(), timeout);
 
   if (timedOut) {
     return `Can't reach ${source.url}: git ls-remote gave no answer within ${timeout / 1000} s.`;
@@ -157,6 +89,18 @@ export const probeSource = async (
     ? `Pin "${source.ref}" not found in ${source.url}.`
     : `Can't reach ${source.url}: ${gitError(["ls-remote"], stderr, code).message}`;
 };
+
+const localCheckout = (dir: string): Checkout => {
+  if (!existsSync(dir)) {
+    throw new ScillaError(`Local path ${dir} does not exist.`);
+  }
+
+  return { root: dir, commit: LOCAL_COMMIT };
+};
+
+/** Whether a repo holds `commit` (a full SHA). */
+const hasCommit = async (repo: string, commit: string) =>
+  (await runGit(["cat-file", "-e", `${commit}^{commit}`], repo)).code === 0;
 
 const temporarySibling = (dir: string) => `${dir}.tmp-${randomUUID()}`;
 
@@ -213,18 +157,10 @@ export class Fetcher {
   /** Materialise the source's repo at its Pin (or the default branch). */
   async checkout(source: Source): Promise<Checkout> {
     if (source.kind === "local") {
-      if (!existsSync(source.url)) {
-        throw new ScillaError(`Local path ${source.url} does not exist.`);
-      }
-
-      return { root: source.url, commit: LOCAL_COMMIT };
+      return localCheckout(source.url);
     }
 
-    // Tagged on every run, so caches made before the tag existed get one too.
-    this.#tagged ??= Promise.all(
-      ["repos", "checkouts"].map((dir) => makeTaggedDir(join(this.#cacheDir, dir))),
-    );
-    await this.#tagged;
+    await this.#tag();
 
     const mirror = await this.#mirror(source.url);
     const commit = await this.#resolve(mirror, source);
@@ -232,11 +168,56 @@ export class Fetcher {
     return { root: await this.#worktree(source.url, mirror, commit), commit };
   }
 
+  /**
+   * Materialise a repo at exactly `commit`, as a lock records it, without moving to anything newer.
+   * A checkout or mirror that already has the commit is used without fetching. Fails with a clear
+   * error when upstream no longer has the commit (a force-pushed branch).
+   */
+  async checkoutCommit(origin: Pick<Source, "kind" | "url">, commit: string): Promise<Checkout> {
+    if (origin.kind === "local") {
+      return localCheckout(origin.url);
+    }
+
+    // A lock is a file anyone can edit; only a full SHA may reach git as an argument.
+    if (!FULL_SHA.test(commit)) {
+      throw new ScillaError(`"${commit}" is not a full commit SHA.`);
+    }
+
+    await this.#tag();
+
+    const known = join(this.#cacheDir, "checkouts", key(origin.url), commit);
+
+    if (existsSync(known)) {
+      return { root: known, commit };
+    }
+
+    const cached = join(this.#cacheDir, "repos", key(origin.url));
+    const offline = existsSync(cached) && (await hasCommit(cached, commit));
+    const mirror = offline ? cached : await this.#mirror(origin.url);
+
+    if (!offline && !(await hasCommit(mirror, commit))) {
+      throw new ScillaError(
+        `Commit ${commit.slice(0, 7)} is no longer in ${origin.url}; was it force-pushed away?`,
+      );
+    }
+
+    return { root: await this.#worktree(origin.url, mirror, commit), commit };
+  }
+
   /** Keep the raw output behind a warning, raised here or by a Traversal, for debug output. */
   explain(warning: string, detail: string | undefined) {
     if (detail !== undefined) {
       this.details.set(warning, detail);
     }
+  }
+
+  // Tagged on every run, so caches made before the tag existed get one too.
+  #tag() {
+    this.#tagged ??= Promise.all(
+      ["repos", "checkouts"].map((dir) => makeTaggedDir(join(this.#cacheDir, dir))),
+    );
+
+    return this.#tagged;
   }
 
   #warn(warning: string, detail: string | undefined) {
