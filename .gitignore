@@ -1,0 +1,30 @@
+# Dependencies and build output
+node_modules/
+dist/
+*.tgz
+coverage/
+
+# Tool caches
+.turbo/
+.fallow/
+
+# fallow crash dumps
+/core
+
+# Copied into apps/cli at pack time
+/apps/cli/README.md
+
+# Agent tooling: installed skills are restored from skills-lock.json,
+# so the third-party copies stay out of the repo
+.agents/skills/
+.claude/skills/
+.claude/settings.local.json
+.claude/worktrees/
+.deepwork/
+
+# Local environment and OS noise
+.env
+.env.*
+!.env.example
+*.log
+.DS_Store
