@@ -7,8 +7,8 @@
     "test": { "dependsOn": ["transit"], "env": ["SCILLA_*"] },
     "//#lint": {},
     "//#format": {},
-    "//#check": {},
-    "//#check:tests": {},
+    "//#check": { "dependsOn": ["scilla-cli#build"] },
+    "//#check:tests": { "dependsOn": ["scilla-cli#build"] },
     "//#check:security": {},
     "//#lint:fix": { "cache": false },
     "//#format:fix": { "cache": false }
