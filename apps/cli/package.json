@@ -1,0 +1,57 @@
+{
+  "name": "scilla-cli",
+  "version": "0.0.1",
+  "description": "Install curated Collections of agent skills",
+  "keywords": [
+    "agent-skills",
+    "bun",
+    "claude",
+    "cli",
+    "codex",
+    "skills"
+  ],
+  "homepage": "https://github.com/ediiiz/scilla#readme",
+  "bugs": {
+    "url": "https://github.com/ediiiz/scilla/issues"
+  },
+  "license": "MIT",
+  "author": "DZTF",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/ediiiz/scilla.git",
+    "directory": "apps/cli"
+  },
+  "bin": {
+    "scilla": "bin/scilla.js"
+  },
+  "files": [
+    "bin",
+    "dist"
+  ],
+  "type": "module",
+  "publishConfig": {
+    "access": "public",
+    "provenance": true
+  },
+  "scripts": {
+    "build": "bun build ./src/index.ts --target bun --production --outdir dist --external @opentui/core --external @opentui/react --external react && bun scripts/emit-schema.ts",
+    "typecheck": "tsc -p tsconfig.json",
+    "test": "bun test",
+    "prepack": "bun scripts/stage-readme.ts",
+    "postpack": "rm -f README.md",
+    "prepublishOnly": "bun run build"
+  },
+  "dependencies": {
+    "@opentui/core": "0.5.12",
+    "@opentui/react": "0.5.12",
+    "react": "19.3.0"
+  },
+  "devDependencies": {
+    "@scilla/core": "workspace:*",
+    "@scilla/tui": "workspace:*",
+    "zod": "4.6.5"
+  },
+  "engines": {
+    "bun": ">=1.4.0"
+  }
+}
