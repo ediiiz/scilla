@@ -1,0 +1,11 @@
+{
+  "$schema": "./node_modules/oxfmt/configuration_schema.json",
+  "ignorePatterns": [
+    ".agents/**",
+    ".claude/**",
+    ".deepwork/**",
+    ".scratch/**",
+    "tools/oxlint/anti-slop/**",
+    "skills-lock.json"
+  ]
+}

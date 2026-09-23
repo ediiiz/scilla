@@ -1,0 +1,52 @@
+{
+  "$schema": "./node_modules/fallow/schema.json",
+  "minimumVersion": "3.28.0",
+  "includeEntryExports": true,
+  "ignorePatterns": [
+    "tools/oxlint/anti-slop/**",
+    ".agents/**",
+    ".claude/**",
+    ".deepwork/**",
+    ".scratch/**"
+  ],
+  "ignoreDependencies": ["@oxlint/plugins"],
+  "duplicates": { "mode": "mild", "threshold": 0.001 },
+  "health": { "maxCyclomatic": 20, "maxCognitive": 15, "maxCrap": 30, "maxUnitSize": 60 },
+  "rules": {
+    // dead code and dependencies
+    "unused-files": "error",
+    "unused-exports": "error",
+    "unused-types": "error",
+    "private-type-leaks": "error",
+    "unused-dependencies": "error",
+    "unused-dev-dependencies": "error",
+    "unused-optional-dependencies": "error",
+    "unused-enum-members": "error",
+    "unused-class-members": "error",
+    "unresolved-imports": "error",
+    "unlisted-dependencies": "error",
+    "duplicate-exports": "error",
+    "type-only-dependencies": "error",
+    "test-only-dependencies": "error",
+    "dev-dependencies-in-production": "error",
+    "circular-dependencies": "error",
+    "re-export-cycle": "error",
+    "boundary-violation": "error",
+    "unused-dependency-overrides": "error",
+    "misconfigured-dependency-overrides": "error",
+    // React graph signals
+    "unused-component-props": "error",
+    "prop-drilling": "error",
+    "thin-wrapper": "error",
+    "duplicate-prop-shape": "error",
+    // suppression hygiene
+    "stale-suppressions": "error",
+    "require-suppression-reason": "error",
+    // enforced by `fallow health` / `fallow security` / `fallow flags`
+    "coverage-gaps": "error",
+    "security-sink": "error",
+    "security-client-server-leak": "error",
+    "feature-flags": "warn",
+    "policy-violation": "error"
+  }
+}
