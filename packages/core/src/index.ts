@@ -42,6 +42,14 @@ export type { Manifest } from "./manifest.ts";
 
 export { checkInstalled, restoreLock } from "./restore.ts";
 
+export {
+  acceptReview,
+  findReference,
+  referenceStatuses,
+  REVIEW_FILE,
+  reviewState,
+} from "./review.ts";
+
 export { formatSource, parseSource } from "./source.ts";
 
 export type { Source } from "./source.ts";

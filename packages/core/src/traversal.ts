@@ -12,6 +12,7 @@ import {
   type Reference,
   type ReferenceEntry,
 } from "./manifest.ts";
+import { readReview, REVIEW_FILE, type Review } from "./review.ts";
 import { formatSource, type Source, type SourceKind } from "./source.ts";
 
 /** One installable skill produced by Traversal, with its origin. */
@@ -30,6 +31,11 @@ export interface ResolvedSkill {
   readonly executables: readonly string[];
   /** Reference labels from the root Collection down to this skill; empty for the root's Own Skills. */
   readonly via: readonly string[];
+  /**
+   * The root Collection's Reference this skill came through, as the manifest writes it (its key in
+   * `scilla-review.json`); undefined for the root's Own Skills.
+   */
+  readonly reference: string | undefined;
 }
 
 export interface Traversal {
@@ -76,6 +82,7 @@ const resolved = (found: FoundSkill, source: Source, checkout: Checkout): Resolv
   optional: false,
   executables: found.executables,
   via: [],
+  reference: undefined,
 });
 
 /** Apply a Reference's filters and marks; `label` heads each skill's `via` chain. */
@@ -132,6 +139,8 @@ interface Place {
   readonly checkout: Checkout;
   /** Warnings in manifest order; References fetch in parallel, so each gets its own log. */
   readonly log: string[];
+  /** The Collection's reviewed commits, which its References resolve to. */
+  readonly review: Review | undefined;
 }
 
 /** Dedupe diamonds and resolve same-name collisions within one Collection's output. */
@@ -190,16 +199,54 @@ const plain = async ({ target, source, checkout }: Place) => {
 export interface TraverseOptions {
   /** What `~` in a local Reference expands to; defaults to the OS home directory. */
   readonly home?: string;
+  /**
+   * False resolves the root Collection's References upstream, ignoring its `scilla-review.json`:
+   * what a review would release. Nested Collections always follow their own reviews.
+   */
+  readonly reviewed?: boolean;
 }
+
+/** A fetched Reference with a reviewed commit resolves to that commit, whatever its Pin says. */
+const pinReviewed = (reference: Reference, review: Review | undefined): Reference => {
+  const commit = review?.references[reference.label]?.commit;
+
+  if (commit === undefined || reference.source.kind === "local") {
+    return reference;
+  }
+
+  return { ...reference, source: { ...reference.source, ref: commit } };
+};
+
+const fromReference = (candidate: Candidate, label: string): Candidate => ({
+  nested: candidate.nested,
+  skill: { ...candidate.skill, reference: label },
+});
 
 class Walker {
   readonly #fetcher: Fetcher;
 
   readonly #home: string | undefined;
 
-  constructor(fetcher: Fetcher, home: string | undefined) {
+  readonly #reviewed: boolean;
+
+  constructor(fetcher: Fetcher, home: string | undefined, reviewed: boolean) {
     this.#fetcher = fetcher;
     this.#home = home;
+    this.#reviewed = reviewed;
+  }
+
+  /** The review a Collection's References follow; the root's is skipped when asked for upstream. */
+  #review(target: string, source: Source, checkout: Checkout, root: boolean) {
+    if (root && !this.#reviewed) {
+      return undefined;
+    }
+
+    const label =
+      source.kind === "local"
+        ? undefined
+        : `${REVIEW_FILE} of ${formatSource(source)} at ${checkout.commit.slice(0, 7)}`;
+
+    return readReview(target, label);
   }
 
   async visit(source: Source, stack: readonly string[], log: string[]): Promise<Visit> {
@@ -217,7 +264,13 @@ class Walker {
         : `${MANIFEST_FILE} of ${formatSource(source)} at ${checkout.commit.slice(0, 7)}`;
 
     const manifest = await readManifest(target, label);
-    const place = { target, source, checkout, log };
+
+    const review =
+      manifest === undefined
+        ? undefined
+        : await this.#review(target, source, checkout, stack.length === 0);
+
+    const place = { target, source, checkout, log, review };
 
     const candidates =
       manifest === undefined ? await plain(place) : await this.#collection(manifest, place, stack);
@@ -267,7 +320,7 @@ class Walker {
 
     try {
       const reference = scopeLocal(
-        normalizeReference(entry, place.target, this.#home),
+        pinReviewed(normalizeReference(entry, place.target, this.#home), place.review),
         place.source,
         place.checkout,
       );
@@ -279,7 +332,10 @@ class Walker {
           ? filterReference(visit.candidates, reference, reference.label)
           : filterReference(visit.candidates.map(markNested), reference, visit.manifest.name);
 
-      return { candidates, log };
+      return {
+        candidates: candidates.map((candidate) => fromReference(candidate, reference.label)),
+        log,
+      };
     } catch (cause) {
       if (cause instanceof ScillaError && !(cause instanceof ManifestError)) {
         const warning = `Reference "${referenceLabel(entry)}" skipped: ${cause.message}`;
@@ -302,11 +358,11 @@ class Walker {
 export const traverse = async (
   source: Source,
   fetcher: Fetcher,
-  { home }: TraverseOptions = {},
+  { home, reviewed = true }: TraverseOptions = {},
 ): Promise<Traversal> => {
   const log: string[] = [];
   const earlier = fetcher.warnings.length;
-  const root = await new Walker(fetcher, home).visit(source, [], log);
+  const root = await new Walker(fetcher, home, reviewed).visit(source, [], log);
 
   return {
     name: root.manifest?.name ?? formatSource(source),

@@ -41,7 +41,8 @@ export const initCollection = async (
   return file;
 };
 
-const requireManifest = async (dir: string): Promise<Manifest> => {
+/** The manifest of the Collection in `dir`; fails when `dir` isn't one. */
+export const requireManifest = async (dir: string): Promise<Manifest> => {
   const manifest = await readManifest(dir);
 
   if (manifest === undefined) {

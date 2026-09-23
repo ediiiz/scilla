@@ -33,6 +33,7 @@ export const skill = (fixture: SkillFixture): ResolvedSkill => ({
   optional: fixture.optional ?? false,
   executables: fixture.executables ?? [],
   via: fixture.via ?? [],
+  reference: fixture.via?.[0],
 });
 
 export const choice = (fixture: SkillFixture): Choice => ({
