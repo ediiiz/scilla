@@ -39,7 +39,8 @@ won't bring it back.
 ### `scilla list [-g]`
 
 Prints each installed Collection (name, source key, short commit) with its skills, then any skills
-no Collection claims.
+no Collection claims. A repo without a `scilla.json` is named after its source, so its line shows
+the source key once (`owner/repo  063bee9`).
 
 ### `scilla audit [-g] [--no-audit]`
 

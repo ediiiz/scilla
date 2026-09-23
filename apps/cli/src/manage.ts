@@ -36,8 +36,9 @@ export const remove = async (io: Io, target: string, flags: InstallFlags) => {
   throw new ScillaError(`No Collection or skill "${target}" is installed ${where(flags.global)}.`);
 };
 
+// A repo without a manifest is named after its source, so its key would only repeat the name.
 const collectionLines = (key: string, entry: CollectionEntry) => [
-  `${entry.name}  ${key}  ${shortCommit(entry.commit)}`,
+  `${entry.name === key ? key : `${entry.name}  ${key}`}  ${shortCommit(entry.commit)}`,
   ...entry.selected.map((name) => `  ${name}`),
 ];
 

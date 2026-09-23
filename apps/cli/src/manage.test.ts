@@ -104,6 +104,15 @@ describe("list", () => {
     expect(result.stdout.split("\n").slice(0, -1).toSorted()).toEqual(expected.toSorted());
   });
 
+  test("a repo without a manifest, named after its source, is named once", async () => {
+    const cwd = temp("project");
+    const plain = plant(temp("plain"), skillAt("skills/solo", "solo"));
+
+    await cli(["add", plain], { cwd });
+
+    expect((await cli(["list"], { cwd })).stdout).toBe(`${plain}  local\n  solo\n`);
+  });
+
   test("skills no Collection claims are listed on their own", async () => {
     const { cwd, first } = await project();
     const file = join(cwd, "scilla-lock.json");
