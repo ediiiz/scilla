@@ -114,19 +114,34 @@ describe("readSkill", () => {
     });
   });
 
-  test("flags executables by exec bit or script extension", async () => {
+  test("flags the exec bit, shell scripts, scripts under scripts/ or bin/, and shebangs", async () => {
     const dir = tempDir();
 
     writeFiles(dir, {
       ...skill("s", "s"),
-      "s/scripts/run*": "#!/bin/sh\n",
+      "s/scripts/run*": "echo run\n",
       "s/scripts/tool.py": "print()\n",
+      "s/bin/cli.mjs": "export {};\n",
+      "s/setup.ps1": "Write-Host hi\n",
+      "s/deep/nested/build.sh": "make\n",
+      "s/tools/launch": "#!/usr/bin/env node\n",
       "s/notes.md": "text",
+      "s/lib/index.ts": "export const x = 1;\n",
+      "s/lib/module.mjs": "export {};\n",
+      "s/lib/helper.py": "print()\n",
+      "s/scripts/lib/deeper.js": "export {};\n",
+      "s/scripts/types.d.ts": "export {};\n",
+      "s/types/index.d.ts*": "export {};\n",
+      "s/empty.txt": "",
     });
 
     expect((await readSkill(`${dir}/s`, dir)).executables).toEqual([
+      "s/bin/cli.mjs",
+      "s/deep/nested/build.sh",
       "s/scripts/run",
       "s/scripts/tool.py",
+      "s/setup.ps1",
+      "s/tools/launch",
     ]);
   });
 });

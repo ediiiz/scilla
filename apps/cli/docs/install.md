@@ -50,8 +50,17 @@ on how it relates to what's installed:
 - A skill with that name is installed from a different origin: marked **conflict**, and it can't
   be ticked.
 
-`--all` ticks everything except conflicts. Skills with executable files (an exec bit or a script
-extension such as `.sh`, `.py`, `.js`) are flagged, and warned about again before install.
+`--all` ticks everything except conflicts. Skills with executable files are flagged, and warned
+about again before install. A file counts as executable when:
+
+- it has the exec bit set,
+- it's a shell-type script (`.sh`, `.bash`, `.zsh`, `.fish`, `.ps1`, `.bat`, `.cmd`) anywhere,
+- it's a `.js`, `.mjs`, `.cjs`, `.ts`, `.py` or `.rb` file directly inside a `scripts/` or `bin/`
+  folder, or
+- its first line is a `#!` shebang.
+
+Type declarations (`.d.ts`) never count, and library code elsewhere (such as `lib/index.ts`)
+doesn't either.
 
 ## Local edits
 

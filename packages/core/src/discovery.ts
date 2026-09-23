@@ -1,6 +1,6 @@
 import { existsSync } from "node:fs";
-import { readdir, readFile, stat } from "node:fs/promises";
-import { basename, extname, join, relative } from "node:path";
+import { open, readdir, readFile, stat } from "node:fs/promises";
+import { basename, dirname, extname, join, relative } from "node:path";
 import { z } from "zod";
 import { CACHE_TAG } from "./fetch.ts";
 
@@ -12,7 +12,7 @@ export interface FoundSkill {
   readonly dir: string;
   /** Path of the skill folder relative to the scanned repo root ("" when the root is the skill). */
   readonly path: string;
-  /** Repo-relative paths of files that can run code (exec bit or a script extension). */
+  /** Repo-relative paths of files that can run code (see `isExecutable`). */
   readonly executables: readonly string[];
 }
 
@@ -23,24 +23,18 @@ const MAX_DEPTH = 6;
 /** Dot-dirs that hold real skills rather than installed copies. */
 const ALLOWED_DOT_DIRS = new Set([".curated", ".experimental", ".system"]);
 
-const SCRIPT_EXTENSIONS = new Set([
-  ".sh",
-  ".bash",
-  ".zsh",
-  ".fish",
-  ".py",
-  ".rb",
-  ".pl",
-  ".js",
-  ".mjs",
-  ".cjs",
-  ".ts",
-  ".mts",
-  ".ps1",
-  ".bat",
-  ".cmd",
-  ".exe",
-]);
+/** Shell-type scripts: flagged wherever they are. */
+const SHELL_EXTENSIONS = new Set([".sh", ".bash", ".zsh", ".fish", ".ps1", ".bat", ".cmd"]);
+
+/** Source files that are only flagged directly under a `scripts/` or `bin/` folder. */
+const SCRIPT_EXTENSIONS = new Set([".js", ".mjs", ".cjs", ".ts", ".py", ".rb"]);
+
+const SCRIPT_FOLDERS = new Set(["scripts", "bin"]);
+
+/** Type declarations never run. */
+const DECLARATION = /\.d\.[cm]?ts$/i;
+
+const SHEBANG = "#!";
 
 const EXEC_BITS = 0o111;
 
@@ -92,8 +86,43 @@ const listFiles = async (dir: string): Promise<string[]> => {
   return nested.flat();
 };
 
-const isExecutable = async (file: string) =>
-  SCRIPT_EXTENSIONS.has(extname(file).toLowerCase()) || ((await stat(file)).mode & EXEC_BITS) !== 0;
+const startsWithShebang = async (file: string) => {
+  const handle = await open(file, "r");
+
+  try {
+    const { buffer, bytesRead } = await handle.read(
+      Buffer.alloc(SHEBANG.length),
+      0,
+      SHEBANG.length,
+      0,
+    );
+
+    return buffer.toString("latin1", 0, bytesRead) === SHEBANG;
+  } finally {
+    await handle.close();
+  }
+};
+
+/**
+ * A file that can run code: one with the exec bit, a shell-type script anywhere, a script directly
+ * under `scripts/` or `bin/`, or one starting with a `#!` line. Type declarations never count.
+ */
+const isExecutable = async (file: string) => {
+  const extension = extname(file).toLowerCase();
+
+  if (DECLARATION.test(file)) {
+    return false;
+  }
+
+  if (
+    SHELL_EXTENSIONS.has(extension) ||
+    (SCRIPT_EXTENSIONS.has(extension) && SCRIPT_FOLDERS.has(basename(dirname(file))))
+  ) {
+    return true;
+  }
+
+  return ((await stat(file)).mode & EXEC_BITS) !== 0 || startsWithShebang(file);
+};
 
 const findExecutables = async (skillDir: string, root: string) => {
   const files = await listFiles(skillDir);
