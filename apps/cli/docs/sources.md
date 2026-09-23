@@ -48,6 +48,9 @@ warning too; its skills are missing.
 
 scilla runs your own `git`, so SSH keys, credential helpers and `gh auth` all apply. Repos are
 mirrored under `$SCILLA_CACHE_DIR`, else `$XDG_CACHE_HOME/scilla`, else `~/.cache/scilla`, and each
-repo is fetched at most once per run. When a fetch fails but a cached mirror exists, scilla warns
-and uses the cache. A git failure is shown in one line; set `SCILLA_DEBUG=1` to see git's full
-output.
+repo is fetched at most once per run. An empty variable counts as unset. When a fetch fails but a
+cached mirror exists, scilla warns and uses the cache. A git failure is shown in one line; set
+`SCILLA_DEBUG=1` to see git's full output.
+
+The cache's `repos/` and `checkouts/` folders each hold a `CACHEDIR.TAG`. Skill discovery never
+scans into a folder that holds one, so a cache inside a Collection's folder can't add skills to it.

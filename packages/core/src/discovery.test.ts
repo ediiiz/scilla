@@ -44,6 +44,21 @@ describe("discoverSkills", () => {
     expect(await names(dir)).toEqual(["1/2/3/4/5/6"]);
   });
 
+  test("never scans into a tagged cache, such as scilla's own", async () => {
+    const dir = tempDir();
+
+    writeFiles(dir, {
+      ...skill("skills/mine", "mine"),
+      "repos/CACHEDIR.TAG": "Signature: 8a477f597d28d172789f06886806bc55\n",
+      "checkouts/CACHEDIR.TAG": "Signature: 8a477f597d28d172789f06886806bc55\n",
+      ...skill("checkouts/0123/abcd/skills/copy", "copy"),
+      ...skill("repos/0123/copy", "copy"),
+    });
+
+    expect(await names(dir)).toEqual(["skills/mine"]);
+    expect(await names(`${dir}/checkouts/0123/abcd`)).toEqual(["skills/copy"]);
+  });
+
   test("returns the root itself when it is a skill", async () => {
     const dir = tempDir();
 

@@ -2,6 +2,7 @@ import { existsSync } from "node:fs";
 import { readdir, readFile, stat } from "node:fs/promises";
 import { basename, extname, join, relative } from "node:path";
 import { z } from "zod";
+import { CACHE_TAG } from "./fetch.ts";
 
 /** A skill folder found on disk. */
 export interface FoundSkill {
@@ -70,6 +71,9 @@ const parseFrontmatter = (text: string) => {
 const skipDir = (name: string) =>
   name === "node_modules" || (name.startsWith(".") && !ALLOWED_DOT_DIRS.has(name));
 
+// A tagged cache (scilla's own `repos/` and `checkouts/`, or another tool's) holds copies, not skills.
+const isCacheDir = (dir: string) => existsSync(join(dir, CACHE_TAG));
+
 const listFiles = async (dir: string): Promise<string[]> => {
   const entries = await readdir(dir, { withFileTypes: true });
 
@@ -116,6 +120,11 @@ export const readSkill = async (dir: string, root: string): Promise<FoundSkill> 
 export const isSkillDir = (dir: string) => existsSync(join(dir, SKILL_FILE));
 
 const walk = async (dir: string, depth: number): Promise<string[]> => {
+  // The scan root itself is never skipped: it's what the Consumer or Curator asked for.
+  if (depth > 0 && isCacheDir(dir)) {
+    return [];
+  }
+
   if (isSkillDir(dir)) {
     return [dir];
   }
@@ -137,7 +146,8 @@ const walk = async (dir: string, depth: number): Promise<string[]> => {
 
 /**
  * Find every skill under `dir`, stopping at the first SKILL.md on each branch and skipping
- * installed-copy dot-dirs (`.agents`, `.claude`…) and `node_modules`. Sorted by path.
+ * installed-copy dot-dirs (`.agents`, `.claude`…), `node_modules` and tagged caches (a folder
+ * holding a `CACHEDIR.TAG`, as scilla's own cache does). Sorted by path.
  */
 export const discoverSkills = async (dir: string, root: string): Promise<FoundSkill[]> => {
   const dirs = (await walk(dir, 0)).toSorted();

@@ -40,7 +40,8 @@ As in [Collection manifest format](issues/04-collection-manifest-format.md): `sc
 ## Fetching and cache
 
 - Shell out to `git`, so the user's credentials apply.
-- Mirror clones live in `$SCILLA_CACHE_DIR`, or `$XDG_CACHE_HOME/scilla`, or `~/.cache/scilla`, under `repos/<sha256(url)>` (its first 32 hex digits). Each is fetched at most once per run.
+- Mirror clones live in `$SCILLA_CACHE_DIR`, or `$XDG_CACHE_HOME/scilla`, or `~/.cache/scilla`, under `repos/<sha256(url)>` (its first 32 hex digits). Each is fetched at most once per run. Empty or blank path variables (`SCILLA_CACHE_DIR`, `XDG_CACHE_HOME`, `SCILLA_HOME`) count as unset (`envValue` in core), so they never mean the cwd.
+- `repos/` and `checkouts/` each hold a `CACHEDIR.TAG` ([Cache Directory Tagging](https://bford.info/cachedir/)), written on every run so older caches get one too. Discovery never descends into a folder holding a `CACHEDIR.TAG` (the scan root itself excepted), so a cache that ends up inside a Collection's folder can't leak skills into it. The tag goes in those subfolders, not the cache root, so a cache root that is a project dir doesn't hide the project from backups.
 - For each commit a checkout is made with `git clone --shared` + `checkout --detach` under `checkouts/<sha256(url)>/<commit>` and reused.
 - A fetch failure with an existing mirror warns and uses the cache (offline mode).
 - Git failures are reported in one line: the first `fatal:` line of git's stderr (the specific one, e.g. "does not appear to be a git repository", rather than the generic "Could not read from remote repository." that follows it), or else its first non-empty line. The full stderr rides along as the error's (or warning's) `detail` and is printed, indented, only when `SCILLA_DEBUG` is set.

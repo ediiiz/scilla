@@ -1,8 +1,9 @@
 import { createHash, randomUUID } from "node:crypto";
 import { existsSync } from "node:fs";
-import { mkdir, rename, rm } from "node:fs/promises";
+import { mkdir, rename, rm, writeFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import { join } from "node:path";
+import { envValue } from "./env.ts";
 import { detailOf, messageOf, ScillaError } from "./errors.ts";
 import type { Source } from "./source.ts";
 
@@ -16,10 +17,32 @@ export interface Checkout {
 
 const LOCAL_COMMIT = "local";
 
-/** Default cache root: `$SCILLA_CACHE_DIR`, else `$XDG_CACHE_HOME/scilla`, else `~/.cache/scilla`. */
+/**
+ * Default cache root: `$SCILLA_CACHE_DIR`, else `$XDG_CACHE_HOME/scilla`, else `~/.cache/scilla`.
+ * Empty or blank variables count as unset.
+ */
 const defaultCacheDir = () =>
-  process.env["SCILLA_CACHE_DIR"] ??
-  join(process.env["XDG_CACHE_HOME"] ?? join(homedir(), ".cache"), "scilla");
+  envValue(process.env, "SCILLA_CACHE_DIR") ??
+  join(envValue(process.env, "XDG_CACHE_HOME") ?? join(homedir(), ".cache"), "scilla");
+
+/** Marks a folder as a cache (https://bford.info/cachedir/): backups and skill discovery skip it. */
+export const CACHE_TAG = "CACHEDIR.TAG";
+
+const CACHE_TAG_TEXT = `Signature: 8a477f597d28d172789f06886806bc55
+# This file is a cache directory tag created by scilla.
+# For information about cache directory tags, see https://bford.info/cachedir/
+`;
+
+/** Create a cache folder and tag it, so a scan that passes through it never reads the checkouts. */
+const makeTaggedDir = async (dir: string) => {
+  await mkdir(dir, { recursive: true });
+
+  const tag = join(dir, CACHE_TAG);
+
+  if (!existsSync(tag)) {
+    await writeFile(tag, CACHE_TAG_TEXT);
+  }
+};
 
 // A cache directory name, not a security boundary; 32 hex digits keep paths short.
 const key = (url: string) => createHash("sha256").update(url).digest("hex").slice(0, 32);
@@ -181,6 +204,8 @@ export class Fetcher {
 
   readonly #worktrees = new Map<string, Promise<string>>();
 
+  #tagged: Promise<void[]> | undefined;
+
   constructor(cacheDir: string = defaultCacheDir()) {
     this.#cacheDir = cacheDir;
   }
@@ -194,6 +219,12 @@ export class Fetcher {
 
       return { root: source.url, commit: LOCAL_COMMIT };
     }
+
+    // Tagged on every run, so caches made before the tag existed get one too.
+    this.#tagged ??= Promise.all(
+      ["repos", "checkouts"].map((dir) => makeTaggedDir(join(this.#cacheDir, dir))),
+    );
+    await this.#tagged;
 
     const mirror = await this.#mirror(source.url);
     const commit = await this.#resolve(mirror, source);
@@ -237,8 +268,6 @@ export class Fetcher {
     }
 
     const temporary = temporarySibling(dir);
-
-    await mkdir(join(this.#cacheDir, "repos"), { recursive: true });
 
     try {
       await git(["clone", "--mirror", "--quiet", "--", url, temporary]);

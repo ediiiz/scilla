@@ -1,14 +1,22 @@
 import { afterAll, describe, expect, test } from "bun:test";
-import { existsSync, rmSync } from "node:fs";
+import { existsSync, readFileSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { ScillaError } from "./errors.ts";
-import { Fetcher, probeSource } from "./fetch.ts";
+import { CACHE_TAG, Fetcher, probeSource } from "./fetch.ts";
 import { parseSource } from "./source.ts";
 import { cleanup, fetcher, Repo, skill, tempDir } from "./testing/fixtures.ts";
 
 afterAll(cleanup);
 
 const source = (raw: string) => parseSource(raw, "/");
+
+const restoreEnv = (name: string, value: string | undefined) => {
+  if (value === undefined) {
+    delete process.env[name];
+  } else {
+    process.env[name] = value;
+  }
+};
 
 describe("Fetcher", () => {
   test("checks out HEAD, a tag and a branch at their commits", async () => {
@@ -108,6 +116,22 @@ describe("Fetcher", () => {
     expect(checkout.root).toBe(join(cacheDir, "checkouts", key, checkout.commit));
   });
 
+  test("tags repos/ and checkouts/ as caches, also in a cache made before tags existed", async () => {
+    const repo = new Repo(skill("s", "s"));
+    const cacheDir = tempDir("cache");
+
+    await new Fetcher(cacheDir).checkout(source(repo.url));
+    rmSync(join(cacheDir, "repos", CACHE_TAG));
+    rmSync(join(cacheDir, "checkouts", CACHE_TAG));
+    await new Fetcher(cacheDir).checkout(source(repo.url));
+
+    for (const dir of ["repos", "checkouts"]) {
+      expect(readFileSync(join(cacheDir, dir, CACHE_TAG), "utf8")).toStartWith(
+        "Signature: 8a477f597d28d172789f06886806bc55",
+      );
+    }
+  });
+
   test("defaults its cache to $SCILLA_CACHE_DIR", async () => {
     const repo = new Repo(skill("s", "s"));
 
@@ -116,6 +140,32 @@ describe("Fetcher", () => {
     const checkout = await new Fetcher().checkout(source(repo.url));
 
     expect(checkout.root.startsWith(process.env["SCILLA_CACHE_DIR"] ?? "unset")).toBe(true);
+  });
+
+  test("treats an empty or blank $SCILLA_CACHE_DIR and $XDG_CACHE_HOME as unset", async () => {
+    const repo = new Repo(skill("s", "s"));
+    const saved = { cache: process.env["SCILLA_CACHE_DIR"], xdg: process.env["XDG_CACHE_HOME"] };
+    const xdg = tempDir("xdg");
+
+    try {
+      // A blank $XDG_CACHE_HOME would fall back to the real home; `envValue`'s own test covers it.
+      Object.assign(process.env, { SCILLA_CACHE_DIR: "", XDG_CACHE_HOME: xdg });
+
+      expect((await new Fetcher().checkout(source(repo.url))).root).toStartWith(
+        join(xdg, "scilla", "checkouts"),
+      );
+
+      Object.assign(process.env, { SCILLA_CACHE_DIR: " \t" });
+
+      expect((await new Fetcher().checkout(source(repo.url))).root).toStartWith(
+        join(xdg, "scilla", "checkouts"),
+      );
+      expect(existsSync(join(process.cwd(), "repos"))).toBe(false);
+      expect(existsSync(join(process.cwd(), "checkouts"))).toBe(false);
+    } finally {
+      restoreEnv("SCILLA_CACHE_DIR", saved.cache);
+      restoreEnv("XDG_CACHE_HOME", saved.xdg);
+    }
   });
 });
 

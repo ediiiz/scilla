@@ -13,6 +13,7 @@ test("the barrel exposes the public API", () => {
     "auditSkills",
     "deleteCollection",
     "deleteSkill",
+    "envValue",
     "findCollection",
     "formatSource",
     "fromLockSource",

@@ -110,6 +110,8 @@ topics.
 - `SCILLA_CACHE_DIR`: where git mirrors and checkouts are cached (default
   `$XDG_CACHE_HOME/scilla`, else `~/.cache/scilla`).
 - `SCILLA_HOME`: used instead of your home directory for `-g` and `~`.
+- A path variable (`SCILLA_CACHE_DIR`, `SCILLA_HOME`, `XDG_CACHE_HOME`) that's empty or only
+  spaces counts as unset, so it never means the current directory.
 - `SCILLA_DEBUG`: any value adds git's full output under errors and warnings, and a stack trace
   under unexpected errors.
 - `SCILLA_NO_AUDIT`, `DO_NOT_TRACK`, `DISABLE_TELEMETRY`: any value turns security ratings off.
