@@ -1,0 +1,288 @@
+import { createHash, randomUUID } from "node:crypto";
+import { existsSync } from "node:fs";
+import { mkdir, rename, rm } from "node:fs/promises";
+import { homedir } from "node:os";
+import { join } from "node:path";
+import { detailOf, messageOf, ScillaError } from "./errors.ts";
+import type { Source } from "./source.ts";
+
+/** A source's repo materialised on disk at one commit. */
+export interface Checkout {
+  /** Directory holding the repo root. */
+  readonly root: string;
+  /** Full commit SHA, or "local" for a working directory. */
+  readonly commit: string;
+}
+
+const LOCAL_COMMIT = "local";
+
+/** Default cache root: `$SCILLA_CACHE_DIR`, else `$XDG_CACHE_HOME/scilla`, else `~/.cache/scilla`. */
+const defaultCacheDir = () =>
+  process.env["SCILLA_CACHE_DIR"] ??
+  join(process.env["XDG_CACHE_HOME"] ?? join(homedir(), ".cache"), "scilla");
+
+// A cache directory name, not a security boundary; 32 hex digits keep paths short.
+const key = (url: string) => createHash("sha256").update(url).digest("hex").slice(0, 32);
+
+/**
+ * Run git and collect its output. With a `timeout` (ms), git is killed when it runs longer; the
+ * result is then marked `timedOut` without waiting for output that a lingering child (such as an
+ * ssh command) may still hold open.
+ */
+const run = async (args: readonly string[], cwd: string, timeout?: number) => {
+  const child = Bun.spawn(["git", ...args], {
+    cwd,
+    stdout: "pipe",
+    stderr: "pipe",
+    env: { ...process.env, GIT_TERMINAL_PROMPT: "0" },
+  });
+
+  let timedOut = false;
+
+  const timer =
+    timeout === undefined
+      ? undefined
+      : setTimeout(() => {
+          timedOut = true;
+          child.kill("SIGKILL");
+        }, timeout);
+
+  const output = Promise.all([
+    new Response(child.stdout).text(),
+    new Response(child.stderr).text(),
+  ]);
+
+  const code = await child.exited;
+
+  clearTimeout(timer);
+
+  if (timedOut) {
+    return { stdout: "", stderr: "", code, timedOut };
+  }
+
+  const [stdout, stderr] = await output;
+
+  return { stdout, stderr, code, timedOut: false };
+};
+
+/**
+ * The most useful line of git's stderr: its first `fatal:` line (the specific one, such as "does
+ * not appear to be a git repository", before the generic "Could not read from remote
+ * repository."), else its first non-empty line.
+ */
+const gitSummary = (stderr: string) => {
+  const lines = stderr.split("\n").flatMap((line) => (line.trim() === "" ? [] : [line.trim()]));
+
+  return lines.find((line) => line.startsWith("fatal:")) ?? lines[0];
+};
+
+const gitError = (args: readonly string[], stderr: string, code: number) => {
+  const detail = stderr.trim();
+
+  return new ScillaError(
+    `git ${args[0] ?? ""} failed: ${gitSummary(stderr) ?? `exit ${code}`}`,
+    detail === "" ? undefined : detail,
+  );
+};
+
+const git = async (args: readonly string[], cwd = process.cwd()) => {
+  const { stdout, stderr, code } = await run(args, cwd);
+
+  if (code !== 0) {
+    throw gitError(args, stderr, code);
+  }
+
+  return stdout.trim();
+};
+
+// A full commit SHA (or an abbreviation) can't be matched by `ls-remote`, which lists refs only.
+const COMMIT_SHA = /^[0-9a-f]{7,40}$/i;
+
+const PROBE_TIMEOUT_MS = 10_000;
+
+export interface ProbeOptions {
+  /** How long `git ls-remote` may run before it is killed, in ms; 10 s by default. */
+  readonly timeout?: number;
+}
+
+/**
+ * Check that a git source's repo (and its Pin, when that names a ref) is reachable, without
+ * fetching it. Returns why it isn't, or undefined when it is or the source is local.
+ */
+export const probeSource = async (
+  source: Source,
+  { timeout = PROBE_TIMEOUT_MS }: ProbeOptions = {},
+) => {
+  if (source.kind === "local") {
+    return undefined;
+  }
+
+  const ref = source.ref === undefined || COMMIT_SHA.test(source.ref) ? [] : [source.ref];
+  const args = ["ls-remote", "--exit-code", "--", source.url, ...ref];
+  const { stderr, code, timedOut } = await run(args, process.cwd(), timeout);
+
+  if (timedOut) {
+    return `Can't reach ${source.url}: git ls-remote gave no answer within ${timeout / 1000} s.`;
+  }
+
+  if (code === 0) {
+    return undefined;
+  }
+
+  // `--exit-code` exits 2, silently, when the repo answered but has no matching ref.
+  return code === 2 && ref.length > 0
+    ? `Pin "${source.ref}" not found in ${source.url}.`
+    : `Can't reach ${source.url}: ${gitError(["ls-remote"], stderr, code).message}`;
+};
+
+const temporarySibling = (dir: string) => `${dir}.tmp-${randomUUID()}`;
+
+/** Move a finished temporary dir into place; if another process got there first, keep theirs. */
+const publish = async (temporary: string, dir: string) => {
+  try {
+    await rename(temporary, dir);
+  } catch (cause) {
+    await rm(temporary, { recursive: true, force: true });
+
+    if (!existsSync(dir)) {
+      throw cause;
+    }
+  }
+};
+
+/** Run `make` once per key, sharing the pending promise between concurrent callers. */
+const once = (cache: Map<string, Promise<string>>, id: string, make: () => Promise<string>) => {
+  const known = cache.get(id);
+
+  if (known !== undefined) {
+    return known;
+  }
+
+  const pending = make();
+
+  cache.set(id, pending);
+
+  return pending;
+};
+
+/**
+ * Fetches repos through the user's own `git`, keeping a mirror per URL and a checkout per commit.
+ * Each URL is fetched at most once per instance; a failed fetch falls back to an existing mirror.
+ */
+export class Fetcher {
+  readonly warnings: string[] = [];
+
+  /** The raw output behind a warning (git's full stderr), keyed by the warning, for debug output. */
+  readonly details = new Map<string, string>();
+
+  readonly #cacheDir: string;
+
+  readonly #mirrors = new Map<string, Promise<string>>();
+
+  readonly #worktrees = new Map<string, Promise<string>>();
+
+  constructor(cacheDir: string = defaultCacheDir()) {
+    this.#cacheDir = cacheDir;
+  }
+
+  /** Materialise the source's repo at its Pin (or the default branch). */
+  async checkout(source: Source): Promise<Checkout> {
+    if (source.kind === "local") {
+      if (!existsSync(source.url)) {
+        throw new ScillaError(`Local path ${source.url} does not exist.`);
+      }
+
+      return { root: source.url, commit: LOCAL_COMMIT };
+    }
+
+    const mirror = await this.#mirror(source.url);
+    const commit = await this.#resolve(mirror, source);
+
+    return { root: await this.#worktree(source.url, mirror, commit), commit };
+  }
+
+  /** Keep the raw output behind a warning, raised here or by a Traversal, for debug output. */
+  explain(warning: string, detail: string | undefined) {
+    if (detail !== undefined) {
+      this.details.set(warning, detail);
+    }
+  }
+
+  #warn(warning: string, detail: string | undefined) {
+    this.warnings.push(warning);
+    this.explain(warning, detail);
+  }
+
+  #mirror(url: string) {
+    return once(this.#mirrors, url, () => this.#fetchMirror(url));
+  }
+
+  #worktree(url: string, mirror: string, commit: string) {
+    return once(this.#worktrees, `${url}\0${commit}`, () =>
+      this.#makeWorktree(url, mirror, commit),
+    );
+  }
+
+  async #fetchMirror(url: string) {
+    const dir = join(this.#cacheDir, "repos", key(url));
+
+    if (existsSync(dir)) {
+      try {
+        await git(["remote", "update", "--prune"], dir);
+      } catch (cause) {
+        this.#warn(`Using cached ${url}; fetch failed (${messageOf(cause)}).`, detailOf(cause));
+      }
+
+      return dir;
+    }
+
+    const temporary = temporarySibling(dir);
+
+    await mkdir(join(this.#cacheDir, "repos"), { recursive: true });
+
+    try {
+      await git(["clone", "--mirror", "--quiet", "--", url, temporary]);
+    } catch (cause) {
+      await rm(temporary, { recursive: true, force: true });
+      throw new ScillaError(`Can't fetch ${url}: ${messageOf(cause)}`, detailOf(cause));
+    }
+
+    await publish(temporary, dir);
+
+    return dir;
+  }
+
+  async #resolve(mirror: string, source: Source) {
+    const ref = source.ref ?? "HEAD";
+
+    try {
+      return await git(["rev-parse", "--verify", "--end-of-options", `${ref}^{commit}`], mirror);
+    } catch {
+      throw new ScillaError(`Pin "${ref}" not found in ${source.url}.`);
+    }
+  }
+
+  async #makeWorktree(url: string, mirror: string, commit: string) {
+    const dir = join(this.#cacheDir, "checkouts", key(url), commit);
+
+    if (existsSync(dir)) {
+      return dir;
+    }
+
+    const temporary = temporarySibling(dir);
+
+    await mkdir(join(this.#cacheDir, "checkouts", key(url)), { recursive: true });
+
+    try {
+      await git(["clone", "--shared", "--no-checkout", "--quiet", mirror, temporary]);
+      await git(["checkout", "--quiet", "--detach", commit], temporary);
+    } catch (cause) {
+      await rm(temporary, { recursive: true, force: true });
+      throw cause;
+    }
+
+    await publish(temporary, dir);
+
+    return dir;
+  }
+}
