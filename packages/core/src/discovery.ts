@@ -124,7 +124,8 @@ const isExecutable = async (file: string) => {
   return ((await stat(file)).mode & EXEC_BITS) !== 0 || startsWithShebang(file);
 };
 
-const findExecutables = async (skillDir: string, root: string) => {
+/** Paths (relative to `root`) of the files under `skillDir` that can run code; see `isExecutable`. */
+export const findExecutables = async (skillDir: string, root: string) => {
   const files = await listFiles(skillDir);
   const flags = await Promise.all(files.map((file) => isExecutable(file)));
 

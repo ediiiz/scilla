@@ -22,6 +22,8 @@ export type {
 
 export { addReference, initCollection, newOwnSkill } from "./curator.ts";
 
+export { diffSkill, riskyFiles } from "./diff.ts";
+
 export { executablesSummary } from "./discovery.ts";
 
 export { envValue } from "./env.ts";
@@ -45,5 +47,7 @@ export { formatSource, parseSource } from "./source.ts";
 export type { Source } from "./source.ts";
 
 export { traverse } from "./traversal.ts";
+
+export { changesSkills, compareInstalled, compareTraversals, lockedSkillDir } from "./updates.ts";
 
 export type { ResolvedSkill, Traversal } from "./traversal.ts";

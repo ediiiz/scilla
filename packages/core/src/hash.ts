@@ -5,7 +5,8 @@ import { join, relative, sep } from "node:path";
 
 const SKIPPED = new Set([".git", "node_modules"]);
 
-const collect = async (dir: string): Promise<string[]> => {
+/** Every file under `dir` (absolute paths), skipping `.git` and `node_modules`, as the hash reads them. */
+export const collect = async (dir: string): Promise<string[]> => {
   const entries = await readdir(dir, { withFileTypes: true });
 
   const nested = await Promise.all(
