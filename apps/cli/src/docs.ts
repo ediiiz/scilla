@@ -5,6 +5,7 @@ import commands from "../docs/commands.md" with { type: "text" };
 import concepts from "../docs/concepts.md" with { type: "text" };
 import install from "../docs/install.md" with { type: "text" };
 import manifest from "../docs/manifest.md" with { type: "text" };
+import review from "../docs/review.md" with { type: "text" };
 import sources from "../docs/sources.md" with { type: "text" };
 import start from "../docs/start.md" with { type: "text" };
 import packageJson from "../package.json" with { type: "json" };
@@ -32,8 +33,13 @@ export const TOPICS = [
   },
   {
     name: "install",
-    summary: "Where files go, both lock files, local edits, update and delete",
+    summary: "Where files go, both lock files, install from the lock, update and delete",
     text: install,
+  },
+  {
+    name: "review",
+    summary: "Reviewed updates: outdated, diff, scilla-review.json and update pull requests",
+    text: review,
   },
   {
     name: "audit",

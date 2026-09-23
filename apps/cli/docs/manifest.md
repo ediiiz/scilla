@@ -37,6 +37,9 @@ one, and `scilla docs schema` prints its JSON Schema.
   that start unticked in the picker and aren't installed by `add -y`.
 - `references` (array, optional): References, each a source string or an object.
 
+The commit a Curator reviewed for each Reference lives in a second file, `scilla-review.json`,
+which `scilla review accept` writes; see `scilla docs review`.
+
 Own Skills are not listed: every folder with a `SKILL.md` that the scan finds in the Collection is
 one (see `scilla docs concepts`).
 

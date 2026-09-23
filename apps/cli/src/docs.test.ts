@@ -39,12 +39,19 @@ describe("scilla docs", () => {
     }
   });
 
-  test.each(["start", "concepts", "sources", "manifest", "commands", "install", "audit", "agents"])(
-    "%s prints its Markdown file exactly",
-    async (name) => {
-      expect(await cli(["docs", name])).toMatchObject({ code: 0, stdout: doc(name) });
-    },
-  );
+  test.each([
+    "start",
+    "concepts",
+    "sources",
+    "manifest",
+    "commands",
+    "install",
+    "review",
+    "audit",
+    "agents",
+  ])("%s prints its Markdown file exactly", async (name) => {
+    expect(await cli(["docs", name])).toMatchObject({ code: 0, stdout: doc(name) });
+  });
 
   test("all is one document with a versioned header and every topic", async () => {
     const { stdout } = await cli(["docs", "all"]);
@@ -143,6 +150,38 @@ describe("the docs stay in step with the code", () => {
 
     for (const field of [...Object.keys(schema.properties), ...reference]) {
       expect(manifest).toContain(`- \`${field}\` (`);
+    }
+  });
+
+  test("the example review workflows run on a schedule and on demand, with a command that parses", () => {
+    const Workflow = z.object({
+      on: z.object({
+        schedule: z.array(z.object({ cron: z.string() })),
+        workflow_dispatch: z.null(),
+      }),
+      jobs: z.record(
+        z.string(),
+        z.object({ steps: z.array(z.object({ run: z.string().optional() })) }),
+      ),
+    });
+
+    for (const name of ["scilla-review.github.yml", "scilla-review.forgejo.yml"]) {
+      const text = readFileSync(
+        join(import.meta.dir, "..", "..", "..", "docs", "examples", name),
+        "utf8",
+      );
+
+      const workflow = Workflow.parse(Bun.YAML.parse(text));
+
+      const runs = Object.values(workflow.jobs).flatMap((job) =>
+        job.steps.flatMap((step) => (step.run?.startsWith("bunx scilla-cli ") ? [step.run] : [])),
+      );
+
+      expect(runs).toHaveLength(1);
+      expect(parseCommand(runs[0]?.split(" ").slice(2) ?? [])).toMatchObject({
+        kind: "review-propose",
+        open: true,
+      });
     }
   });
 

@@ -29,13 +29,18 @@ and `check` all start with one.
 **Pin**: an optional fixed git ref (tag, branch or commit) on a Reference, written `#ref`. Without
 one, the Reference floats to upstream's latest (the default branch's `HEAD`).
 
+**Review**: the commit of a Reference that its Curator last checked, recorded in the Collection's
+`scilla-review.json` by `scilla review accept`. A reviewed Reference resolves to that commit for
+every Consumer, whatever its Pin says, so upstream changes only reach Consumers once a Curator
+accepts them. A Reference without a Review floats as before. See `scilla docs review`.
+
 ## Roles
 
 **Curator**: the person who creates and maintains a Collection (`init`, `ref add`, `skill new`,
-`check`).
+`check`, and `outdated`, `diff` and `review` inside it).
 
 **Consumer**: the person who installs skills from a Collection into a project or their home
-directory (`add`, `update`, `delete`, `list`, `audit`).
+directory (`add`, `install`, `update`, `outdated`, `diff`, `delete`, `list`, `audit`).
 
 ## How a Traversal decides
 
@@ -57,5 +62,8 @@ directory (`add`, `update`, `delete`, `list`, `audit`).
   warning.
 - A cycle back to a Collection already on the path is skipped with a warning; nesting stops at
   depth 8.
+- A Reference with a Review in its Collection's `scilla-review.json` resolves to the reviewed
+  commit instead of its Pin or the default branch.
 - A Reference that can't be fetched or resolved becomes a warning and its skills are missing. A bad
-  `scilla.json` anywhere is fatal, and so is a root Collection that can't be fetched.
+  `scilla.json` or `scilla-review.json` anywhere is fatal, and so is a root Collection that can't
+  be fetched.

@@ -25,6 +25,9 @@ scilla add your-team/skills -g     # install into your home directory instead
 scilla add your-team/skills -y     # no picker: install the recommended skills
 scilla list                        # what is installed, from which Collection, at which commit
 scilla audit                       # security ratings of the installed skills
+scilla install                     # a teammate: install exactly what scilla-lock.json records
+scilla outdated                    # what an update would change
+scilla diff                        # ...and the changes themselves
 scilla update                      # pull the latest for every installed Collection
 scilla delete some-skill           # remove one skill; update won't bring it back
 ```
@@ -44,11 +47,13 @@ scilla skill new house-style                  # scaffold skills/house-style/SKIL
 scilla ref add anthropics/skills/skills/pdf   # append a Reference (checked with git ls-remote)
 scilla ref add acme/data-skills --include 'sql-*' --optional
 scilla check .                                # traverse it: the tree, warnings, name clashes
+scilla review accept                          # record each Reference's commit as reviewed
 git add -A && git commit -m "Team skills" && git push
 ```
 
 There is no registry: the pushed repo is the Collection, and `scilla add <owner>/<repo>` installs
-it.
+it. With `scilla-review.json` committed, Consumers only get the commits you reviewed; `scilla
+outdated` and `scilla review accept` release upstream updates (see `scilla docs review`).
 
 ## Read more
 
@@ -56,6 +61,7 @@ it.
 - `scilla docs sources`: every way to name a source
 - `scilla docs manifest`: every `scilla.json` field
 - `scilla docs commands`: every command and flag
-- `scilla docs install`: where files go, the lock files, update and delete
+- `scilla docs install`: where files go, the lock files, `install`, update and delete
+- `scilla docs review`: reviewed updates, `outdated`, `diff` and update pull requests
 - `scilla docs audit`: security ratings and privacy
 - `scilla docs agents`: a checklist for AI agents

@@ -82,8 +82,11 @@ scilla add your-team/skills -g       # …or into your home directory, for every
 scilla add your-team/skills -y       # no picker: install the recommended skills
 scilla add your-team/skills --all    # no picker: install everything, optional skills included
 
+scilla install                       # a teammate, after cloning: exactly what scilla-lock.json records
 scilla list                          # what's installed, from which Collection, at which commit
 scilla audit                         # security ratings of what's installed
+scilla outdated                      # what an update would change (exit 10 if anything)
+scilla diff                          # the changes themselves, skill by skill
 scilla update                        # pull the latest for every installed Collection
 scilla update Team                   # …or just one
 scilla delete sql-helper             # remove one skill; update won't bring it back
@@ -100,6 +103,16 @@ What `update` does:
 - **Edited locally:** left alone, with a warning. Pass `--force` if you really want the upstream version.
 - **Declined:** a skill you declined or deleted stays declined.
 
+### Sharing a project
+
+Commit `scilla-lock.json` with your project. When a teammate clones it, they run:
+
+```sh
+scilla install
+```
+
+and get the same skills, at the same commits, byte for byte (scilla checks each one against the hash in the lock). Nothing upstream is looked up, so a Collection that moved on since doesn't sneak in. In CI, `scilla install --frozen` fails when what's installed doesn't match the lock, and `scilla install --check` checks without installing anything.
+
 ## Making a Collection
 
 ```sh
@@ -115,6 +128,41 @@ git add -A && git commit -m "Team skills" && git push
 That's it. There's no registry and nothing to publish. The git repo is the Collection.
 
 You can hand-edit `scilla.json` whenever you like. The `$schema` line gives your editor autocomplete and validation.
+
+## Reviewed updates
+
+Here's the uncomfortable part of pointing at skills instead of copying them: the sources keep changing. A skill is a set of instructions your agent follows with your permissions, and sometimes a script it runs. When the PDF skill's author pushes a new version on Tuesday, every Consumer of your Collection gets it on their next `scilla update`, and nobody read it first.
+
+So you read it first.
+
+```sh
+scilla review accept     # once, in your Collection: record the commit of each Reference as reviewed
+git commit -am "chore(review): start reviewing References" && git push
+```
+
+That writes `scilla-review.json` next to `scilla.json`: for each Reference, the commit you last reviewed. From now on, a Consumer's `add` or `update` gets exactly that commit, whatever upstream did since. Upstream changes only reach anyone once you accept them.
+
+Next Tuesday, in your Collection:
+
+```sh
+scilla outdated          # anthropics/skills/skills/pdf  outdated  3f2a9c0  8d41e7b (exits 10)
+scilla diff              # every changed file, new scripts highlighted, ratings before and after
+scilla review accept     # happy with it? record the new commit
+git commit -am "chore(review): accept the pdf skill update" && git push
+```
+
+Consumers can look before they leap too: `scilla outdated` and `scilla diff` in their project show what `update` would bring, and the update picker marks skills that changed (press `d` to read the diff).
+
+### Let a bot open the pull request
+
+Nobody remembers to check on Tuesdays. `scilla review propose --open` does the git work for you: it bumps the reviewed commits on a `scilla/review-updates` branch, pushes it, and opens a pull request whose body is the review (what changed per Reference, new or changed scripts, ratings, the diffs). If the pull request is already open, it updates it instead. It works on **GitHub, Gitea and Forgejo** (and GitLab), so it fits the forge your team already runs. Merging the pull request is releasing the update.
+
+Drop one of the example workflows into your Collection's repo and it runs every week:
+
+- GitHub: [`docs/examples/scilla-review.github.yml`](https://github.com/ediiiz/scilla/blob/main/docs/examples/scilla-review.github.yml) → `.github/workflows/`
+- Forgejo or Gitea: [`docs/examples/scilla-review.forgejo.yml`](https://github.com/ediiiz/scilla/blob/main/docs/examples/scilla-review.forgejo.yml) → `.forgejo/workflows/` or `.gitea/workflows/`
+
+Tokens, providers and the file format are in `scilla docs review`.
 
 ## Sources
 
@@ -137,7 +185,8 @@ Skills are instructions your agent follows, and sometimes they come with scripts
 
 - Every skill in the picker shows its origin: repo, path and exact commit.
 - Skills that contain executable files are flagged, and scilla warns again before installing them.
-- `scilla-lock.json` records the exact commit and content hash of everything installed, so you can review changes in git like any other code.
+- `scilla-lock.json` records the exact commit and content hash of everything installed, so you can review changes in git like any other code, and `scilla install` reproduces it exactly.
+- `scilla diff` shows what an update would change before you install it, and a Curator's `scilla-review.json` makes sure Consumers only get commits someone reviewed (see [Reviewed updates](#reviewed-updates)).
 - A remote Collection can't reach into your disk. Absolute paths, `~` and `..` in its References are refused.
 
 ### Security ratings
@@ -166,7 +215,7 @@ The manual ships inside scilla, so it always matches the version you run:
 
 ```sh
 scilla docs                # the topics, one line each
-scilla docs sources        # one topic: start, concepts, sources, manifest, commands, install, audit, agents
+scilla docs sources        # one topic: start, concepts, sources, manifest, commands, install, review, audit, agents
 scilla docs all            # everything in one Markdown document, llms.txt style
 scilla docs schema         # the scilla.json JSON Schema
 ```

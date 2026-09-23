@@ -30,6 +30,38 @@ Version 1, keys sorted, no timestamps, so it diffs cleanly in git.
   - `computedHash`: the content hash of what was installed
   - `optional`: whether it was optional
 
+## Installing from the lock
+
+`scilla install` reproduces exactly what `scilla-lock.json` records, so a teammate who clones the
+project gets the team's skills with one command, and CI can check that nothing drifted:
+
+```sh
+scilla install             # a teammate, after cloning: the locked skills at the locked commits
+scilla install --frozen    # CI: install, then exit 1 if anything still differs from the lock
+scilla install --check     # CI: install nothing, exit 1 if anything differs from the lock
+```
+
+- It installs every skill in the lock's `skills`, from its `url` and `path` at its locked `commit`,
+  and nothing else. It never resolves a Reference or opens the picker, and it doesn't change
+  `scilla-lock.json`. A skill whose Collection moved on upstream still gets the locked commit.
+- Before copying a skill, it checks that the files hash to the lock's `computedHash`. A mismatch is
+  an error for that skill, and nothing is copied.
+- Git mirrors and checkouts that already hold the locked commit are used without fetching, so it
+  works offline once the cache is warm.
+- A skill that's already installed with the locked files is `Unchanged:`. A folder whose files
+  differ (you edited it, or it's another version) is skipped with a warning, as `update` does;
+  `--force` replaces it with the locked files.
+- A locked commit that's gone upstream (someone force-pushed the branch) is an error for the skills
+  from it: `error: Can't install <name>: Commit abc1234 is no longer in <url>; was it force-pushed
+away?`. The other skills still install, and the exit code is 1. Run `scilla update` to move to
+  what upstream has now.
+- `--check` reports `Missing:` (in the lock, not installed), `Modified:` (installed, but the files
+  differ) and `Extra:` (a folder in `./.agents/skills` that neither `scilla-lock.json` nor
+  `skills-lock.json` lists). The home directory is shared with other tools, so `-g` doesn't look
+  for extras.
+- `scilla install <source>` is an error pointing at `scilla add <source>`: `install` only ever
+  restores the lock.
+
 ## skills-lock.json
 
 Project installs also add or update an entry per skill in `skills-lock.json` (`source`,
@@ -72,13 +104,15 @@ didn't install is never replaced without `--force` either.
 
 ## update
 
-`scilla update` re-traverses each installed Collection, one at a time:
+`scilla update` re-traverses each installed Collection, one at a time. To see what it would do
+first, run `scilla outdated` and `scilla diff` (see `scilla docs review`).
 
 - A selected skill that's still there is kept, and reinstalled if its contents changed
   (`Updated:`), otherwise `Unchanged:`.
 - A skill gone upstream is removed (`Removed:`), unless it has local edits.
 - A skill that's new upstream (never selected or declined) is offered unticked.
-- The picker opens with the kept skills ticked.
+- The picker opens with the kept skills ticked. A kept skill whose files changed upstream is marked
+  **changed**, and `d` shows its changes since the lock in the preview.
 
 With `-y` or without a terminal, only the kept skills are installed, and new ones are listed:
 `N new skill(s) available: a, b (run scilla update <name> to pick)`.

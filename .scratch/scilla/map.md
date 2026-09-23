@@ -40,14 +40,14 @@ A v1 spec at `.scratch/scilla/spec.md`, with every design decision settled (Coll
 
 - [Traversal semantics](issues/05-traversal-semantics.md), [Install and lock model](issues/06-install-and-lock-model.md), [CLI surface](issues/08-cli-surface.md), [Stack and distribution](issues/09-stack-and-distribution.md): decided by the agent on delegation. See [spec.md](spec.md).
 - [TUI flows prototype](issues/07-tui-flows-prototype.md): skipped; built directly in `packages/tui`.
+- [Restore from the lock](issues/16-restore-from-lock.md): `scilla install` installs exactly the lock's skills at their locked commits (hash-checked, cached commits used offline, never resolving upstream); `--frozen` and `--check` exit 1 on drift for CI; local edits skip unless `--force`; a force-pushed commit fails only its skills; `install <source>` is an error pointing at `add`.
+- [Reviewed updates](issues/12-reviewed-updates.md): `scilla-review.json` records the reviewed commit per Reference and pins Consumers to it (unreviewed References float); `outdated` (exit 10 when updates are available) and `diff` for Consumers and, inside a Collection, for Curators; `review accept` releases; `review propose [--open]` commits the bump on `scilla/review-updates` and opens or updates the PR on GitHub, Gitea, Forgejo or GitLab; example workflows in `docs/examples/`; the picker marks changed skills and `d` shows their diff.
 
 - 2026-09-22: v1 is implemented in `packages/core`, `packages/tui` and `apps/cli`. All gates pass (`bun run verify`, `check:security`) and a sandboxed end-to-end smoke test passed. Publishing is blocked: the npm names `scilla` (a security holding package) and `@scilla` (a scope owned by someone else) are taken.
 
 ## Next (after v1)
 
 The effort continues past v1, toward what makes scilla more than a multi-agent installer: reviewed, reproducible skill sharing for teams.
-- [Reviewed updates](issues/12-reviewed-updates.md): `outdated`, `diff`, and update PRs on GitHub, Gitea and Forgejo. In progress.
-- [Restore from the lock](issues/16-restore-from-lock.md): `scilla install`. In progress.
 - [Context budget and trigger clashes](issues/14-context-budget-and-trigger-clashes.md)
 - [Usage-based pruning](issues/15-usage-based-pruning.md)
 - [Customise a referenced skill without forking](issues/13-overlays.md): needs grilling first.

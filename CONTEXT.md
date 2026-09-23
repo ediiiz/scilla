@@ -33,6 +33,10 @@ _Avoid_: Crawl, resolve
 **Pin**:
 An optional fixed git ref on a Reference; without one, the Reference floats to upstream's latest.
 
+**Review**:
+The commit of a Reference that its Curator last checked, recorded in the Collection's `scilla-review.json`. A reviewed Reference resolves to that commit for Consumers, whatever its Pin says; one without a Review floats as before.
+_Avoid_: Approval, vetting, sign-off
+
 ### Roles
 
 **Curator**:

@@ -1,0 +1,45 @@
+# Proposes reviewed updates for a scilla Collection on Forgejo or Gitea: when a Reference that
+# scilla-review.json reviews has moved upstream, it opens (or updates) a pull request that bumps
+# its reviewed commit, with the per-skill changes in the body. Merging the pull request releases
+# the update to Consumers. See `scilla docs review`.
+#
+# Copy this file to .forgejo/workflows/scilla-review.yml (Forgejo) or
+# .gitea/workflows/scilla-review.yml (Gitea); both accept GitHub Actions syntax. Run
+# `scilla review accept` once and commit scilla-review.json first: References without a reviewed
+# commit float and are never proposed.
+#
+# The token needs permission to push branches and open pull requests. The automatic token may be
+# enough; otherwise create an access token with repository write access and store it as the
+# SCILLA_REVIEW_TOKEN secret. References to private repos need git credentials here too.
+name: Review upstream skills
+
+on:
+  schedule:
+    - cron: "17 6 * * 1" # Mondays, 06:17 UTC
+  workflow_dispatch:
+
+jobs:
+  propose:
+    name: Propose reviewed updates
+    # Your runner's label: Forgejo runners often use "docker", Gitea's act_runner "ubuntu-latest".
+    runs-on: docker
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      # A full URL, since the instance's default action mirror may not carry this action.
+      - uses: https://github.com/oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - name: Set the identity of the review commit
+        run: |
+          git config user.name "scilla-review"
+          git config user.email "scilla-review@noreply.invalid"
+
+      # Gitea and Forgejo share the pulls API: --provider gitea works on either.
+      - name: Open or update the pull request
+        run: bunx scilla-cli review propose --open --provider forgejo
+        env:
+          FORGEJO_TOKEN: ${{ secrets.SCILLA_REVIEW_TOKEN || secrets.GITHUB_TOKEN }}
