@@ -10,6 +10,10 @@ afterAll(cleanup);
 
 const source = (raw: string) => parseSource(raw, "/");
 
+const key = (url: string) => new Bun.CryptoHasher("sha256").update(url).digest("hex").slice(0, 32);
+
+const at = (url: string, path: string) => ({ ...source(url), path });
+
 const restoreEnv = (name: string, value: string | undefined) => {
   if (value === undefined) {
     delete process.env[name];
@@ -51,21 +55,23 @@ describe("Fetcher", () => {
     expect(a).toEqual(b);
   });
 
-  test("checkoutCommit uses a cached checkout or mirror before fetching anything", async () => {
+  test("checkoutCommit uses a cached checkout or store before fetching anything", async () => {
     const repo = new Repo(skill("s", "s"));
     const first = repo.head();
     const second = repo.commit(skill("t", "t"));
     const cacheDir = tempDir("cache");
-    const origin = source(repo.url);
 
-    await new Fetcher(cacheDir).checkout(origin);
+    await new Fetcher(cacheDir).checkout(source(`${repo.url}#${first}`));
+    await new Fetcher(cacheDir).checkout(source(repo.url));
+    rmSync(join(cacheDir, "checkouts", key(repo.url), first), { recursive: true });
     rmSync(repo.dir, { recursive: true, force: true });
 
-    // The repo is gone: the mirror (for `first`) and the checkout (for `second`) must do.
-    const old = await new Fetcher(cacheDir).checkoutCommit(origin, first);
-    const known = await new Fetcher(cacheDir).checkoutCommit(origin, second);
+    // The repo is gone: the store (for `first`) and the checkout (for `second`) must do.
+    const old = await new Fetcher(cacheDir).checkoutCommit(source(repo.url), first);
+    const known = await new Fetcher(cacheDir).checkoutCommit(source(repo.url), second);
 
     expect(old.commit).toBe(first);
+    expect(existsSync(join(old.root, "s", "SKILL.md"))).toBe(true);
     expect(existsSync(join(old.root, "t"))).toBe(false);
     expect(existsSync(join(known.root, "t", "SKILL.md"))).toBe(true);
   });
@@ -99,7 +105,7 @@ describe("Fetcher", () => {
 
     // The git failure reads as one sentence, without an error class name in it.
     await expect(fetcher().checkout(source(`file://${tempDir()}/nope`))).rejects.toThrow(
-      /^Can't fetch file:\/\/\S+: git clone failed: fatal: [^\n]+$/,
+      /^Can't fetch file:\/\/\S+: git fetch failed: fatal: [^\n]+$/,
     );
     await expect(fetcher().checkout(source(`${repo.url}#no-such-ref`))).rejects.toThrow(
       /Pin "no-such-ref"/,
@@ -124,7 +130,7 @@ describe("Fetcher", () => {
     );
     expect(offline.warnings).toEqual([
       expect.stringMatching(
-        /^Using cached \S+; fetch failed \(git remote failed: fatal: [^\n]+\)\.$/,
+        /^Using cached \S+; fetch failed \(git fetch failed: fatal: [^\n]+\)\.$/,
       ),
     ]);
     expect(offline.details.get(offline.warnings[0] ?? "")).toContain("fatal:");
@@ -142,14 +148,70 @@ describe("Fetcher", () => {
     expect(failure.detail).toContain("\n");
   });
 
+  test("checks out only the source's path, and the whole repo for the root", async () => {
+    const repo = new Repo({ ...skill("skills/a", "a"), ...skill("examples/deep", "deep") });
+    const cache = fetcher();
+    const skills = await cache.checkout(at(repo.url, "skills"));
+    const whole = await cache.checkout(source(repo.url));
+
+    expect(existsSync(join(skills.root, "skills", "a", "SKILL.md"))).toBe(true);
+    expect(existsSync(join(skills.root, "examples"))).toBe(false);
+    expect(existsSync(join(whole.root, "examples", "deep", "SKILL.md"))).toBe(true);
+  });
+
+  test("reuses a checkout of a folder above the path, in this run or a cached one", async () => {
+    const repo = new Repo({ ...skill("skills/a", "a"), ...skill("skills/b", "b") });
+    const cacheDir = tempDir("cache");
+    const cache = new Fetcher(cacheDir);
+
+    const [skills, a] = await Promise.all([
+      cache.checkout(at(repo.url, "skills")),
+      cache.checkout(at(repo.url, "skills/a")),
+    ]);
+
+    const b = await new Fetcher(cacheDir).checkoutCommit(at(repo.url, "skills/b"), a.commit);
+
+    expect(a.root).toBe(skills.root);
+    expect(b.root).toBe(skills.root);
+  });
+
+  test("fetches only the commit and the files under the source's path", async () => {
+    const repo = new Repo({ ...skill("skills/a", "a"), "examples/big.txt": "x".repeat(10_000) });
+
+    repo.commit(skill("skills/b", "b"));
+
+    const cacheDir = tempDir("cache");
+    const checkout = await new Fetcher(cacheDir).checkout(at(repo.url, "skills"));
+
+    const has = (object: string) =>
+      Bun.spawnSync(["git", "cat-file", "-e", object], {
+        cwd: join(cacheDir, "repos", key(repo.url)),
+        env: { ...process.env, GIT_NO_LAZY_FETCH: "1" },
+      }).exitCode === 0;
+
+    expect(has(`${checkout.commit}:skills/a/SKILL.md`)).toBe(true);
+    expect(has(`${checkout.commit}:examples/big.txt`)).toBe(false);
+    expect(has(`${checkout.commit}~1`)).toBe(false);
+  });
+
+  test("resolves a Pin only git rev-parse understands, such as HEAD~1 or a short SHA", async () => {
+    const repo = new Repo(skill("s", "s"));
+    const first = repo.head();
+
+    repo.commit(skill("t", "t"));
+
+    const cache = fetcher();
+
+    expect((await cache.checkout(source(`${repo.url}#HEAD~1`))).commit).toBe(first);
+    expect((await cache.checkout(source(`${repo.url}#${first.slice(0, 7)}`))).commit).toBe(first);
+  });
+
   test("names cache folders by a sha256 of the URL", async () => {
     const repo = new Repo(skill("s", "s"));
     const cacheDir = tempDir("cache");
     const checkout = await new Fetcher(cacheDir).checkout(source(repo.url));
-    const key = new Bun.CryptoHasher("sha256").update(repo.url).digest("hex").slice(0, 32);
-
-    expect(existsSync(join(cacheDir, "repos", key))).toBe(true);
-    expect(checkout.root).toBe(join(cacheDir, "checkouts", key, checkout.commit));
+    expect(existsSync(join(cacheDir, "repos", key(repo.url)))).toBe(true);
+    expect(checkout.root).toBe(join(cacheDir, "checkouts", key(repo.url), checkout.commit));
   });
 
   test("tags repos/ and checkouts/ as caches, also in a cache made before tags existed", async () => {

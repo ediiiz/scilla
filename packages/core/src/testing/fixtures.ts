@@ -87,6 +87,9 @@ export class Repo {
   constructor(files: Files) {
     this.dir = tempDir("repo");
     git(this.dir, "init", "--quiet", "--initial-branch=main");
+    // Serve partial and by-id fetches, as GitHub does, so the Fetcher's lean path runs.
+    git(this.dir, "config", "uploadpack.allowFilter", "true");
+    git(this.dir, "config", "uploadpack.allowAnySHA1InWant", "true");
     this.commit(files);
   }
 
@@ -114,6 +117,9 @@ export class Repo {
     writeFiles(this.dir, files);
     git(this.dir, "add", "--all");
     git(this.dir, "commit", "--quiet", "--amend", "--message", "fixture (rewritten)");
+    // Gone for good, so a fetch of the old commit by id fails as it would upstream.
+    git(this.dir, "reflog", "expire", "--expire=now", "--all");
+    git(this.dir, "gc", "--quiet", "--prune=now");
 
     return this.head();
   }

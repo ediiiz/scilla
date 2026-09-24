@@ -45,7 +45,7 @@ describe("main", () => {
     const loud = await cli(["add", bad], { debug: true });
 
     expect(quiet.code).toBe(1);
-    expect(quiet.stderr).toMatch(/^error: Can't fetch \S+: git clone failed: fatal: [^\n]+\n$/);
+    expect(quiet.stderr).toMatch(/^error: Can't fetch \S+: git fetch failed: fatal: [^\n]+\n$/);
     expect(loud.stderr).toStartWith(quiet.stderr);
     expect(loud.stderr.slice(quiet.stderr.length)).toMatch(/^(( {2}.*)?\n){2,}$/);
   });

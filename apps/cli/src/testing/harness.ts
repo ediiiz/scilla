@@ -93,6 +93,9 @@ export const gitFixture = (tree: Tree) => {
     plant(dir, more);
     runGit(dir, ["add", "--all"]);
     runGit(dir, ["commit", "--quiet", "--amend", "-m", "fixture (rewritten)"]);
+    // Gone for good, so a fetch of the old commit by id fails as it would upstream.
+    runGit(dir, ["reflog", "expire", "--expire=now", "--all"]);
+    runGit(dir, ["gc", "--quiet", "--prune=now"]);
   };
 
   runGit(dir, ["init", "--quiet", "--initial-branch=main"]);

@@ -242,7 +242,7 @@ describe("check", () => {
     const loud = await cli(["check", dir], { debug: true });
 
     expect(quiet.stderr).toMatch(
-      /^warning: Reference "\S+" skipped: Can't fetch \S+: git clone failed: fatal: [^\n]+\n$/,
+      /^warning: Reference "\S+" skipped: Can't fetch \S+: git fetch failed: fatal: [^\n]+\n$/,
     );
     expect(loud.stderr).toStartWith(quiet.stderr);
     expect(loud.stderr.slice(quiet.stderr.length)).toMatch(/^(( {2}.*)?\n){2,}$/);

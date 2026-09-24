@@ -1,8 +1,9 @@
 import { existsSync } from "node:fs";
 import { open, readdir, readFile, stat } from "node:fs/promises";
-import { basename, dirname, extname, join, relative } from "node:path";
+import { basename, dirname, extname, join } from "node:path";
 import { z } from "zod";
 import { CACHE_TAG } from "./fetch.ts";
+import { repoPath } from "./source.ts";
 
 /** A skill folder found on disk. */
 export interface FoundSkill {
@@ -130,7 +131,7 @@ export const findExecutables = async (skillDir: string, root: string) => {
   const flags = await Promise.all(files.map((file) => isExecutable(file)));
 
   return files
-    .flatMap((file, index) => (flags[index] === true ? [relative(root, file)] : []))
+    .flatMap((file, index) => (flags[index] === true ? [repoPath(root, file)] : []))
     .toSorted();
 };
 
@@ -157,7 +158,7 @@ export const readSkill = async (dir: string, root: string): Promise<FoundSkill> 
     name: frontmatter.name ?? basename(dir),
     description: frontmatter.description?.trim() ?? "",
     dir,
-    path: relative(root, dir),
+    path: repoPath(root, dir),
     executables: await findExecutables(dir, root),
   };
 };

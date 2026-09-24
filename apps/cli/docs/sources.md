@@ -66,5 +66,11 @@ repo is fetched at most once per run. An empty variable counts as unset. When a 
 cached mirror exists, scilla warns and uses the cache. A git failure is shown in one line; set
 `SCILLA_DEBUG=1` to see git's full output.
 
+scilla downloads only what it reads: the Pin's commit (no history), the folder listings on the
+way to the Reference's path, and the files under that path. Pointing a Reference at the folder
+that holds its skills keeps even a big repo's download to a few KB. A Pin a server can't resolve
+by itself, such as `HEAD~1` or a short commit SHA, also downloads the repo's commit history (still
+without files) to find its commit.
+
 The cache's `repos/` and `checkouts/` folders each hold a `CACHEDIR.TAG`. Skill discovery never
 scans into a folder that holds one, so a cache inside a Collection's folder can't add skills to it.

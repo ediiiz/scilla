@@ -1,5 +1,5 @@
 import { homedir } from "node:os";
-import { resolve } from "node:path";
+import { relative, resolve, sep } from "node:path";
 import { SourceError } from "./errors.ts";
 
 export type SourceKind = "github" | "git" | "local";
@@ -15,6 +15,9 @@ export interface Source {
   /** The `@name` selector: only this skill is taken. */
   readonly skill: string | undefined;
 }
+
+/** `file` relative to the repo at `root`, with "/" on every OS, as a Source path and the lock use. */
+export const repoPath = (root: string, file: string) => relative(root, file).split(sep).join("/");
 
 const GITHUB_SHORTHAND = /^([\w.-]+)\/([\w.-]+)(?:\/(.+))?$/;
 

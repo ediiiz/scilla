@@ -1,5 +1,5 @@
 import { existsSync } from "node:fs";
-import { isAbsolute, join, relative } from "node:path";
+import { isAbsolute, join } from "node:path";
 import { discoverSkills, isSkillDir, readSkill, type FoundSkill } from "./discovery.ts";
 import { ManifestError, ScillaError } from "./errors.ts";
 import type { Checkout, Fetcher } from "./fetch.ts";
@@ -13,7 +13,7 @@ import {
   type ReferenceEntry,
 } from "./manifest.ts";
 import { readReview, REVIEW_FILE, type Review } from "./review.ts";
-import { formatSource, type Source, type SourceKind } from "./source.ts";
+import { formatSource, repoPath, type Source, type SourceKind } from "./source.ts";
 
 /** One installable skill produced by Traversal, with its origin. */
 export interface ResolvedSkill {
@@ -121,7 +121,7 @@ const scopeLocal = (reference: Reference, parent: Source, checkout: Checkout): R
     return reference;
   }
 
-  const path = relative(checkout.root, reference.source.url);
+  const path = repoPath(checkout.root, reference.source.url);
 
   if (path.startsWith("..") || isAbsolute(path)) {
     throw new ScillaError(`local paths in a fetched Collection must stay inside its repo.`);
