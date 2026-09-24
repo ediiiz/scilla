@@ -1,6 +1,6 @@
 {
   "name": "scilla-cli",
-  "version": "0.2.1",
+  "version": "0.3.0",
   "description": "Install curated Collections of agent skills",
   "keywords": [
     "agent-skills",
