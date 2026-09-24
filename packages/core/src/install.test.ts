@@ -1,7 +1,13 @@
 import { afterAll, describe, expect, test } from "bun:test";
 import { existsSync, lstatSync, mkdirSync, symlinkSync } from "node:fs";
 import { join } from "node:path";
-import { installedDir, installedHash, installSkillFiles, removeSkillFiles } from "./install.ts";
+import {
+  installedDir,
+  installedHash,
+  installSkillFiles,
+  removeSkillFiles,
+  unansweredAgents,
+} from "./install.ts";
 import { cleanup, scope, skill, tempDir, writeFiles } from "./testing/fixtures.ts";
 
 afterAll(cleanup);
@@ -23,7 +29,7 @@ describe("installSkillFiles", () => {
     mkdirSync(links);
     symlinkSync("/nowhere", join(links, "a"));
 
-    expect(await installSkillFiles(target, "a", source())).toEqual([]);
+    expect(await installSkillFiles(target, "a", source(), undefined)).toEqual([]);
     expect(existsSync(join(installedDir(target, "a"), "old.md"))).toBe(false);
     expect(existsSync(join(installedDir(target, "a"), "node_modules"))).toBe(false);
     expect(existsSync(join(links, "a", "ref.md"))).toBe(true);
@@ -31,11 +37,38 @@ describe("installSkillFiles", () => {
   });
 });
 
+describe("agent links", () => {
+  test("follow the Consumer's answer, else link only into an agent folder that exists", async () => {
+    const missing = scope();
+    const declined = scope({ claude: true });
+    const agreed = scope();
+
+    const linked = (target: typeof missing) =>
+      existsSync(join(target.base, ".claude", "skills", "a"));
+
+    await installSkillFiles(missing, "a", source(), undefined);
+    await installSkillFiles(declined, "a", source(), { ".claude": false });
+    await installSkillFiles(agreed, "a", source(), { ".claude": true });
+
+    expect(linked(missing)).toBe(false);
+    expect(linked(declined)).toBe(false);
+    expect(linked(agreed)).toBe(true);
+  });
+
+  test("are worth asking about only for a missing agent folder without an answer", () => {
+    expect(unansweredAgents(scope(), undefined)).toEqual([
+      { folder: ".claude", name: "Claude Code" },
+    ]);
+    expect(unansweredAgents(scope(), { ".claude": false })).toEqual([]);
+    expect(unansweredAgents(scope({ claude: true }), undefined)).toEqual([]);
+  });
+});
+
 describe("removeSkillFiles", () => {
   test("removes the copy and its link but not a real folder of the same name", async () => {
     const linked = scope({ claude: true });
 
-    await installSkillFiles(linked, "a", source());
+    await installSkillFiles(linked, "a", source(), undefined);
     await removeSkillFiles(linked, "a");
 
     expect(existsSync(installedDir(linked, "a"))).toBe(false);

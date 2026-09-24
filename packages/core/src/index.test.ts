@@ -49,6 +49,7 @@ test("the barrel exposes the public API", () => {
     "reviewState",
     "riskyFiles",
     "traverse",
+    "unansweredAgents",
     "writeManifest",
   ]);
   expect(new core.ManifestError("x")).toBeInstanceOf(core.ScillaError);

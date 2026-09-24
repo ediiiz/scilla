@@ -36,12 +36,11 @@ audited**, which says nothing about whether it's safe.
 - `scilla add` and `scilla update` fetch ratings while the picker is open. The picker says
   "checking ratings…" until they arrive, then badges each rated skill with its worst rating; the
   detail pane and the preview list every provider's rating, or say why a skill wasn't audited.
-- After you pick, and before anything is installed, they print the table for the ticked skills
-  that have ratings.
-- If any ticked skill is rated `medium` or worse by any provider, scilla asks on a terminal:
-  `Proceed with installation? [y/N]`. Anything but `y` or `yes` cancels.
-- With `-y` or without a terminal, it prints the table, warns about the risky skills on stderr,
-  and goes ahead.
+- When you press Enter and a ticked skill is rated `medium` or worse by any provider, the picker
+  lists those skills and asks: `y` installs anyway, `n` or Esc goes back to the list. Enter before
+  the ratings arrive waits for them, and `y` installs without waiting.
+- With `-y` or without a terminal, there's no picker: scilla prints the table for the ticked
+  skills that have ratings, warns about the risky ones on stderr, and goes ahead.
 - `scilla audit [-g]` prints the table for every installed skill, then which ones weren't audited
   and why.
 

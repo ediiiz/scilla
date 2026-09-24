@@ -76,22 +76,19 @@ export const unauditedLine = (unaudited: ReadonlyMap<string, Unaudited>) => {
 const worstOf = (audit: SkillAudit | undefined) => audit?.worst;
 
 /**
- * Before an install: print the ticked skills' ratings and, when one is rated medium or worse, ask
- * on a terminal whether to go ahead. Unattended runs only warn. Resolves false when the Consumer
- * says no.
+ * Before an unattended install (`--yes`, no terminal): print the ticked skills' ratings and warn
+ * about any rated medium or worse. The install goes ahead; the picker asks on a terminal.
  */
 export const reviewAudit = async (
-  io: Io,
   reporter: Reporter,
   pending: Promise<AuditReport>,
   ticked: readonly string[],
-  attended: boolean,
 ) => {
   const { audits } = await pending;
   const rated = ticked.filter((name) => audits.has(name));
 
   if (rated.length === 0) {
-    return true;
+    return;
   }
 
   for (const line of auditTable(rated, audits)) {
@@ -108,21 +105,9 @@ export const reviewAudit = async (
     return worst !== undefined && RISKY.has(worst) ? [`${name} (${worst})`] : [];
   });
 
-  if (risky.length === 0) {
-    return true;
+  if (risky.length > 0) {
+    reporter.warn(`Rated medium risk or higher: ${risky.join(", ")}`);
   }
-
-  const summary = `Rated medium risk or higher: ${risky.join(", ")}`;
-
-  if (!attended) {
-    reporter.warn(summary);
-
-    return true;
-  }
-
-  const answer = await io.ask(`${summary}. Proceed with installation? [y/N] `);
-
-  return /^y(es)?$/i.test(answer.trim());
 };
 
 /** `scilla audit [-g]`: ratings for every skill in the lock. */

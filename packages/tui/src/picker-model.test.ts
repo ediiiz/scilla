@@ -223,11 +223,8 @@ describe("pickerKeyOutcome", () => {
       kind: "act",
       action: { kind: "preview", open: true },
     });
-    expect(pickerKeyOutcome(state, "return", false)).toEqual({
-      kind: "finish",
-      selection: new Set(["a"]),
-    });
-    expect(pickerKeyOutcome(state, "q", false)).toEqual({ kind: "finish", selection: undefined });
+    expect(pickerKeyOutcome(state, "return", false)).toEqual({ kind: "confirm" });
+    expect(pickerKeyOutcome(state, "q", false)).toEqual({ kind: "cancel" });
     expect(pickerKeyOutcome(state, "j", false)).toEqual({ kind: "pass" });
     expect(pickerKeyOutcome(state, "down", false)).toEqual({ kind: "pass" });
 
@@ -242,10 +239,15 @@ describe("pickerKeyOutcome", () => {
     expect(pickerKeyOutcome(previewing, "q", false)).toEqual({ kind: "pass" });
     expect(pickerKeyOutcome(previewing, "escape", false)).toEqual({ kind: "pass" });
     expect(pickerKeyOutcome(previewing, "space", false)).toEqual({ kind: "pass" });
-    expect(pickerKeyOutcome(previewing, "c", true)).toEqual({
-      kind: "finish",
-      selection: undefined,
-    });
+    expect(pickerKeyOutcome(previewing, "c", true)).toEqual({ kind: "cancel" });
+  });
+
+  test("an open dialog owns every key", () => {
+    const asking = reducePicker(state, { kind: "dialog", dialog: "risk" });
+
+    expect(pickerKeyOutcome(asking, "space", false)).toEqual({ kind: "dialog" });
+    expect(pickerKeyOutcome(asking, "return", false)).toEqual({ kind: "dialog" });
+    expect(reducePicker(asking, { kind: "dialog", dialog: undefined }).dialog).toBeUndefined();
   });
 });
 

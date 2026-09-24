@@ -1,13 +1,10 @@
 import { createInterface } from "node:readline/promises";
 import type { AuditFetch, Plan, Scope } from "@scilla/core";
-import type { HomeAction, HomeContext, PickOptions, ProgressStream } from "@scilla/tui";
+import type { HomeAction, HomeContext, PickOptions, PickResult, ProgressStream } from "@scilla/tui";
 
 /** The TUI entry points the CLI calls; tests pass stubs. */
 export interface Tui {
-  readonly pickSkills: (
-    plan: Plan,
-    options?: PickOptions,
-  ) => Promise<ReadonlySet<string> | undefined>;
+  readonly pickSkills: (plan: Plan, options?: PickOptions) => Promise<PickResult | undefined>;
   readonly runHome: (context: HomeContext) => Promise<HomeAction | undefined>;
   readonly withProgress: <T>(
     label: string,

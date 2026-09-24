@@ -55,7 +55,7 @@ const kit = () => {
 
 const everything = (plan: {
   readonly choices: readonly { readonly skill: { readonly name: string } }[];
-}) => Promise.resolve(new Set(plan.choices.map((choice) => choice.skill.name)));
+}) => Promise.resolve({ selected: new Set(plan.choices.map((choice) => choice.skill.name)) });
 
 describe("install-time ratings", () => {
   test("prints the ticked skills' ratings before installing", async () => {
@@ -94,16 +94,10 @@ describe("install-time ratings", () => {
     expect(result.questions).toEqual([]);
   });
 
-  test("on a terminal, a risky rating asks first, and anything but yes cancels", async () => {
+  test("on a terminal the picker gets the ratings and confirms risky ones itself", async () => {
     const cacheDir = kit();
     const { fetch, requests } = network({ bad: RISKY });
     let requestedBeforePick = 0;
-
-    const pickSkills = (plan: Parameters<typeof everything>[0]) => {
-      requestedBeforePick = requests.length;
-
-      return everything(plan);
-    };
 
     const no = temp("project");
 
@@ -112,31 +106,33 @@ describe("install-time ratings", () => {
       cacheDir,
       fetch,
       interactive: true,
-      pickSkills,
-      ask: () => Promise.resolve("n"),
+      pickSkills: () => {
+        requestedBeforePick = requests.length;
+
+        // What the picker resolves with when the Consumer backs out of its risk dialog.
+        return Promise.resolve(undefined);
+      },
     });
 
     // The ratings were already on their way while the picker was open, and it was handed them.
     expect(requestedBeforePick).toBeGreaterThan(0);
     expect(refused.audits).toHaveLength(1);
     expect((await refused.audits[0])?.audits.get("bad")?.worst).toBe("high");
-    expect(refused.questions).toEqual([
-      "Rated medium risk or higher: bad (high). Proceed with installation? [y/N] ",
-    ]);
     expect(refused.stdout).toEndWith("Cancelled.\n");
     expect(existsSync(join(no, ".agents"))).toBe(false);
 
-    const yes = temp("project");
-
     const accepted = await cli(["add", "acme/kit"], {
-      cwd: yes,
+      cwd: temp("project"),
       cacheDir,
       fetch,
       interactive: true,
       pickSkills: everything,
-      ask: () => Promise.resolve(" Yes "),
     });
 
+    // Nothing is asked or printed again once the picker has confirmed.
+    expect(accepted.questions).toEqual([]);
+    expect(accepted.stdout).not.toContain("Security risk assessments");
+    expect(accepted.stderr).not.toContain("Rated medium risk");
     expect(accepted.stdout).toContain("Installed: bad, good");
   });
 

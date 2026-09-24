@@ -74,7 +74,11 @@ const fixture = () =>
 const mount = async (height = 30) => {
   const { reported, done } = reporter<ReadonlySet<string> | undefined>();
 
-  const screen = await mountScreen(<SkillPicker plan={fixture()} onDone={done} />, 80, height);
+  const screen = await mountScreen(
+    <SkillPicker plan={fixture()} onDone={(result) => done(result?.selected)} />,
+    80,
+    height,
+  );
 
   return { ...screen, outcome: reported };
 };
@@ -223,7 +227,11 @@ const changed = (diff: () => Promise<string>) => {
     { name: "omega", dir: join(root, "omega"), status: "installed", selected: true },
   ]);
 
-  return mountScreen(<SkillPicker plan={picked} diff={diff} onDone={done} />, 90, 30);
+  return mountScreen(
+    <SkillPicker plan={picked} diff={diff} onDone={(result) => done(result?.selected)} />,
+    90,
+    30,
+  );
 };
 
 describe("the changes preview", () => {

@@ -39,7 +39,11 @@ export { detectProvider, openPullRequest, parseRemote, PROVIDERS } from "./forge
 
 export { fromLockSource, readLock } from "./lock.ts";
 
-export type { CollectionEntry, Lock, Scope, SkillEntry } from "./lock.ts";
+export type { AgentLinks, CollectionEntry, Lock, Scope, SkillEntry } from "./lock.ts";
+
+export { unansweredAgents } from "./install.ts";
+
+export type { Agent } from "./install.ts";
 
 export { manifestJsonSchema, readManifest, writeManifest } from "./manifest.ts";
 

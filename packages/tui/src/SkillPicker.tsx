@@ -1,11 +1,28 @@
 import type { ScrollBoxRenderable } from "@opentui/core";
 import { useKeyboard } from "@opentui/react";
-import { executablesSummary, type AuditReport, type Choice, type Plan } from "@scilla/core";
+import {
+  executablesSummary,
+  type Agent,
+  type AuditReport,
+  type Choice,
+  type Plan,
+} from "@scilla/core";
 import type { CheckboxRootRenderable } from "@tuiparts/core/checkbox";
 import type { CheckboxGroupRenderable } from "@tuiparts/core/checkbox-group";
 import { Checkbox } from "@tuiparts/react/checkbox";
 import { CheckboxGroup } from "@tuiparts/react/checkbox-group";
 import { useCallback, useEffect, useMemo, useRef, useState, type RefObject } from "react";
+import {
+  afterRisk,
+  dialogKey,
+  dialogView,
+  firstDialog,
+  linkAnswers,
+  riskyPicks,
+  type AskLinks,
+  type DialogKey,
+  type PickResult,
+} from "./confirm-model.ts";
 import {
   descriptionText,
   initialPickerState,
@@ -20,7 +37,7 @@ import {
   type PickerRow,
   type PickerState,
 } from "./picker-model.ts";
-import { headerStatus, rowBadges } from "./rating-model.ts";
+import { headerStatus, rowBadges, type Ratings } from "./rating-model.ts";
 import { RatingLines } from "./RatingLines.tsx";
 import { RatingsContext, useAuditRatings, useRatings } from "./ratings.ts";
 import { SkillPreview } from "./SkillPreview.tsx";
@@ -31,8 +48,10 @@ export interface SkillPickerProps {
   readonly plan: Plan;
   /** Security ratings still on their way; rows get badges when they arrive. */
   readonly audit?: Promise<AuditReport> | undefined;
-  /** Called once: the chosen skill names, or undefined when the Consumer cancels. */
-  readonly onDone: (selection: ReadonlySet<string> | undefined) => void;
+  /** Called once: what the Consumer chose, or undefined when they cancel. */
+  readonly onDone: (result: PickResult | undefined) => void;
+  /** Agents whose folder doesn't exist yet, to ask about linking the skills into after Enter. */
+  readonly askLinks?: AskLinks;
   /** Loads a changed skill's changes since the lock (a unified diff), for `d`. */
   readonly diff?: ((choice: Choice) => Promise<string>) | undefined;
 }
@@ -120,7 +139,7 @@ function SkillList({ state, dispatch }: SkillListProps) {
   useKeyboard((key) => {
     const intent = pickerIntent(key.name, key.ctrl);
 
-    if (intent?.kind === "move" && !state.previewing) {
+    if (intent?.kind === "move" && !state.previewing && state.dialog === undefined) {
       key.preventDefault();
       roots.get(moveTarget(state, intent.target)?.choice.skill.name ?? "")?.focus();
     }
@@ -207,13 +226,66 @@ const KEY_HELP = "↑↓/jk move · space toggle · a all · p preview · enter 
 const DIFF_KEY_HELP =
   "↑↓/jk move · space toggle · a all · p preview · d changes · enter confirm · esc cancel";
 
-/** The picker's own keys; see `pickerKeyOutcome`. */
-const usePickerKeys = (
-  latest: RefObject<PickerState>,
-  dispatch: (action: PickerAction) => void,
-  onDone: SkillPickerProps["onDone"],
-) => {
+interface Flow {
+  readonly latest: RefObject<PickerState>;
+  readonly ratings: Ratings;
+  readonly askLinks: AskLinks;
+  readonly dispatch: (action: PickerAction) => void;
+  readonly onDone: SkillPickerProps["onDone"];
+}
+
+/** Open `dialog`, or finish with the ticked skills when there's none left to ask. */
+const advance = ({ latest, dispatch, onDone }: Flow, dialog: PickerState["dialog"]) => {
+  if (dialog === undefined) {
+    onDone({ selected: latest.current.selected });
+  } else {
+    dispatch({ kind: "dialog", dialog });
+  }
+};
+
+/** Move, tick or answer in the link dialog's checklist of agents. */
+const answerLinks = (flow: Flow, agents: readonly Agent[], answer: DialogKey) => {
+  const { latest, dispatch, onDone } = flow;
+  const { selected, linkFocus, linkUnticked } = latest.current;
+  const focused = agents[linkFocus];
+
+  if (answer === "up" || answer === "down") {
+    const index = linkFocus + (answer === "down" ? 1 : -1);
+
+    dispatch({ kind: "link-focus", index: Math.min(Math.max(index, 0), agents.length - 1) });
+  } else if (answer === "toggle" && focused !== undefined) {
+    dispatch({ kind: "link-toggle", folder: focused.folder });
+  } else if (answer === "accept" || answer === "decline") {
+    onDone({ selected, agentLinks: linkAnswers(agents, linkUnticked, answer === "decline") });
+  }
+};
+
+/** Answer the open dialog; see `dialogKey`. */
+const answerDialog = (flow: Flow, name: string, ctrl: boolean) => {
+  const { latest, askLinks, dispatch, onDone } = flow;
+  const { dialog } = latest.current;
+
+  if (dialog === undefined) {
+    return;
+  }
+
+  const answer = dialogKey(dialog, name, ctrl);
+
+  if (answer === "cancel") {
+    onDone(undefined);
+  } else if (answer === "back") {
+    dispatch({ kind: "dialog", dialog: undefined });
+  } else if (dialog === "risk" && answer === "accept") {
+    advance(flow, afterRisk(askLinks));
+  } else if (dialog === "link" && askLinks !== undefined) {
+    answerLinks(flow, askLinks, answer);
+  }
+};
+
+/** The picker's own keys; see `pickerKeyOutcome`. Enter asks what `firstDialog` says first. */
+const usePickerKeys = (flow: Flow) => {
   useKeyboard((key) => {
+    const { latest, ratings, askLinks, dispatch, onDone } = flow;
     const outcome = pickerKeyOutcome(latest.current, key.name, key.ctrl);
 
     if (outcome.kind === "pass") {
@@ -222,15 +294,97 @@ const usePickerKeys = (
 
     key.preventDefault();
 
-    if (outcome.kind === "act") {
-      dispatch(outcome.action);
-    } else {
-      onDone(outcome.selection);
+    switch (outcome.kind) {
+      case "act": {
+        dispatch(outcome.action);
+        break;
+      }
+
+      case "confirm": {
+        advance(flow, firstDialog(ratings, latest.current.selected, askLinks));
+        break;
+      }
+
+      case "dialog": {
+        answerDialog(flow, key.name, key.ctrl);
+        break;
+      }
+
+      default: {
+        onDone(undefined);
+      }
     }
   });
 };
 
-export function SkillPicker({ plan, audit, onDone, diff }: SkillPickerProps) {
+/** A risk dialog opened before the ratings arrived moves on by itself when none is risky. */
+const useSettledRisk = (flow: Flow, state: PickerState) => {
+  const { ratings, askLinks } = flow;
+  const settled = state.dialog === "risk" && ratings !== "pending";
+  const clear = settled && riskyPicks(ratings, state.selected).length === 0;
+
+  useEffect(() => {
+    if (clear) {
+      advance(flow, afterRisk(askLinks));
+    }
+    // `flow` is rebuilt every render; only a change in what's settled should move on.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [clear]);
+};
+
+interface DialogPanelProps {
+  readonly state: PickerState;
+  readonly ratings: Ratings;
+  readonly askLinks: AskLinks;
+}
+
+// tuiparts has no dialog; this is a plain OpenTUI panel over the key help, the list still visible.
+function DialogPanel({ state, ratings, askLinks }: DialogPanelProps) {
+  if (state.dialog === undefined) {
+    return null;
+  }
+
+  const view = dialogView(state, ratings, askLinks);
+
+  return (
+    <box
+      border
+      borderColor={ACCENT}
+      title={view.title}
+      flexDirection="column"
+      flexShrink={0}
+      paddingX={1}
+    >
+      {view.lines.map((line) => (
+        <text key={line.text} fg={toneColor(line.tone)}>
+          {line.text}
+        </text>
+      ))}
+      <text fg={ACCENT} marginTop={1}>
+        {view.keys}
+      </text>
+    </box>
+  );
+}
+
+interface FooterProps extends DialogPanelProps {
+  readonly diffable: boolean;
+}
+
+/** The open dialog, else the key help (or the hint that replaces it for one key). */
+function Footer({ state, ratings, askLinks, diffable }: FooterProps) {
+  if (state.dialog !== undefined) {
+    return <DialogPanel state={state} ratings={ratings} askLinks={askLinks} />;
+  }
+
+  return (
+    <text fg={state.hint === undefined ? MUTED : WARN} flexShrink={0} wrapMode="none" truncate>
+      {state.hint ?? (diffable ? DIFF_KEY_HELP : KEY_HELP)}
+    </text>
+  );
+}
+
+export function SkillPicker({ plan, audit, onDone, diff, askLinks }: SkillPickerProps) {
   const [state, setState] = useState(() => initialPickerState(plan));
   const ratings = useAuditRatings(audit);
   // Keys can arrive faster than React renders; confirm must see every toggle before it.
@@ -252,7 +406,10 @@ export function SkillPicker({ plan, audit, onDone, diff }: SkillPickerProps) {
     setState(latest.current);
   }, []);
 
-  usePickerKeys(latest, dispatch, onDone);
+  const flow: Flow = { latest, ratings, askLinks, dispatch, onDone };
+
+  usePickerKeys(flow);
+  useSettledRisk(flow, state);
 
   // tuiparts has no layout or text primitives; the frame, header and key help are plain OpenTUI.
   // The list stays mounted but hidden under the preview, so its Checkbox focus and ticks survive.
@@ -294,9 +451,7 @@ export function SkillPicker({ plan, audit, onDone, diff }: SkillPickerProps) {
             ))}
           </box>
         )}
-        <text fg={state.hint === undefined ? MUTED : WARN} flexShrink={0} wrapMode="none" truncate>
-          {state.hint ?? (diffable ? DIFF_KEY_HELP : KEY_HELP)}
-        </text>
+        <Footer state={state} ratings={ratings} askLinks={askLinks} diffable={diffable} />
       </box>
       {state.previewing && focused !== undefined ? (
         <SkillPreview

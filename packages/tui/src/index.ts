@@ -7,3 +7,5 @@ export type { ProgressStream } from "./progress.ts";
 export { pickSkills, runHome } from "./run.tsx";
 
 export type { PickOptions } from "./run.tsx";
+
+export type { PickResult } from "./confirm-model.ts";

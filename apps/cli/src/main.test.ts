@@ -124,7 +124,7 @@ describe("home", () => {
       interactive: true,
       runHome: choose({ kind: "add", source }),
       pickSkills: (plan) =>
-        Promise.resolve(new Set(plan.choices.map((choice) => choice.skill.name))),
+        Promise.resolve({ selected: new Set(plan.choices.map((choice) => choice.skill.name)) }),
     });
 
     expect(result.plans).toHaveLength(1);

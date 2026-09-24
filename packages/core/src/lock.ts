@@ -46,6 +46,11 @@ const SkillEntrySchema = z.object({
 
 const LockSchema = z.object({
   version: z.literal(1),
+  /**
+   * Whether installed skills get linked into each agent folder (`.claude`), as the Consumer
+   * answered. An agent without an answer is linked only when its folder already exists.
+   */
+  agentLinks: z.record(z.string(), z.boolean()).optional(),
   collections: z.record(z.string(), CollectionEntrySchema),
   skills: z.record(z.string(), SkillEntrySchema),
 });
@@ -55,6 +60,8 @@ export type Lock = z.infer<typeof LockSchema>;
 export type CollectionEntry = z.infer<typeof CollectionEntrySchema>;
 
 export type SkillEntry = z.infer<typeof SkillEntrySchema>;
+
+export type AgentLinks = NonNullable<Lock["agentLinks"]>;
 
 export const toLockSource = (source: Source): CollectionEntry["source"] => ({
   kind: source.kind,
@@ -141,11 +148,17 @@ const migrateGithubUrls = (lock: Lock): Lock => {
     },
   ]);
 
-  return {
+  const migrated: Lock = {
     version: 1,
     collections: Object.fromEntries(collections),
     skills: Object.fromEntries(skills),
   };
+
+  if (lock.agentLinks !== undefined) {
+    migrated.agentLinks = lock.agentLinks;
+  }
+
+  return migrated;
 };
 
 export const readLock = async (scope: Scope): Promise<Lock> => {
@@ -166,11 +179,16 @@ export const readLock = async (scope: Scope): Promise<Lock> => {
 };
 
 export const writeLock = async (scope: Scope, lock: Lock) => {
-  await writeJson(lockPath(scope), {
-    version: 1,
-    collections: sortKeys(lock.collections),
-    skills: sortKeys(lock.skills),
-  });
+  const sorted: Lock = { version: 1, collections: {}, skills: {} };
+
+  // Written in this key order, so the file reads the same after every write.
+  if (lock.agentLinks !== undefined) {
+    sorted.agentLinks = sortKeys(lock.agentLinks);
+  }
+
+  sorted.collections = sortKeys(lock.collections);
+  sorted.skills = sortKeys(lock.skills);
+  await writeJson(lockPath(scope), sorted);
 };
 
 // The skills CLI's project lock. Entries are kept loose so fields scilla doesn't know survive a rewrite.

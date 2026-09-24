@@ -1,8 +1,21 @@
 import { existsSync } from "node:fs";
 import { ScillaError } from "./errors.ts";
 import { computeSkillHash } from "./hash.ts";
-import { installedDir, installedHash, installSkillFiles, removeSkillFiles } from "./install.ts";
-import { syncSkillsLock, toLockSource, writeLock, type Lock, type Scope } from "./lock.ts";
+import {
+  installedDir,
+  installedHash,
+  installSkillFiles,
+  linkSkill,
+  removeSkillFiles,
+} from "./install.ts";
+import {
+  syncSkillsLock,
+  toLockSource,
+  writeLock,
+  type AgentLinks,
+  type Lock,
+  type Scope,
+} from "./lock.ts";
 import { formatSource, githubRepo } from "./source.ts";
 import type { ResolvedSkill, Traversal } from "./traversal.ts";
 
@@ -185,9 +198,12 @@ class Applier {
     const unchanged =
       existing !== undefined && (await installedHash(this.#scope, name)) === computedHash;
 
-    if (!unchanged) {
-      this.outcome.warnings.push(...(await installSkillFiles(this.#scope, name, skill.dir)));
-    }
+    // An unchanged skill still gets linked, in case the Consumer just said yes to an agent.
+    this.outcome.warnings.push(
+      ...(unchanged
+        ? await linkSkill(this.#scope, name, this.#lock.agentLinks)
+        : await installSkillFiles(this.#scope, name, skill.dir, this.#lock.agentLinks)),
+    );
 
     this.#lock.skills[name] = {
       collections: union(existing?.collections, key),
@@ -290,6 +306,8 @@ export interface ApplyOptions {
    * stay undecided instead of being recorded as declined, so later updates still offer them.
    */
   readonly decide?: boolean;
+  /** The Consumer's answers on linking into agent folders, recorded in the lock before installing. */
+  readonly agentLinks?: AgentLinks | undefined;
 }
 
 /** A choice left unticked without the Consumer deciding it: it stays out of `declined`. */
@@ -302,9 +320,14 @@ export const applyPlan = async (
   lock: Lock,
   plan: Plan,
   selected: ReadonlySet<string>,
-  { force = false, decide = true }: ApplyOptions = {},
+  { force = false, decide = true, agentLinks }: ApplyOptions = {},
 ): Promise<Outcome> => {
   const next = structuredClone(lock);
+
+  if (agentLinks !== undefined) {
+    next.agentLinks = { ...next.agentLinks, ...agentLinks };
+  }
+
   const applier = new Applier(scope, next, force);
   const kept = new Set(await installChoices(applier, plan, selected));
   const dropped = (next.collections[plan.key]?.selected ?? []).filter((name) => !kept.has(name));

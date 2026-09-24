@@ -28,7 +28,19 @@ export interface PickerState {
   readonly previewing: boolean;
   /** The preview opened on the skill's changes since the lock (`d`) rather than its SKILL.md. */
   readonly diffing: boolean;
+  /** The question Enter raised, while it waits for an answer; see `confirm-model.ts`. */
+  readonly dialog: Dialog | undefined;
+  /** The focused agent in the link dialog's checklist. */
+  readonly linkFocus: number;
+  /** Agent folders unticked in the link dialog; every agent starts ticked. */
+  readonly linkUnticked: ReadonlySet<string>;
 }
+
+/**
+ * The questions Enter can raise before the picker finishes: whether to go ahead with skills rated
+ * medium risk or worse, then whether to link the skills into an agent folder that doesn't exist.
+ */
+export type Dialog = "risk" | "link";
 
 /**
  * What the picker does with a change. Roving focus (arrows, Home/End) and Space toggling belong to
@@ -40,7 +52,10 @@ export type PickerAction =
   | { readonly kind: "select"; readonly names: readonly string[] }
   | { readonly kind: "toggle-all" }
   | { readonly kind: "refuse" }
-  | { readonly kind: "preview"; readonly open: boolean; readonly diff?: boolean };
+  | { readonly kind: "preview"; readonly open: boolean; readonly diff?: boolean }
+  | { readonly kind: "dialog"; readonly dialog: Dialog | undefined }
+  | { readonly kind: "link-focus"; readonly index: number }
+  | { readonly kind: "link-toggle"; readonly folder: string };
 
 export type MoveTarget = "next" | "previous" | "first" | "last";
 
@@ -92,7 +107,18 @@ export const initialPickerState = (plan: Plan): PickerState => {
   }
 
   // The CheckboxGroup's tab stop starts on the first row, conflict or not.
-  return { groups, rows, focus: 0, selected, hint: undefined, previewing: false, diffing: false };
+  return {
+    groups,
+    rows,
+    focus: 0,
+    selected,
+    hint: undefined,
+    previewing: false,
+    diffing: false,
+    dialog: undefined,
+    linkFocus: 0,
+    linkUnticked: new Set(),
+  };
 };
 
 const selectableNames = (state: PickerState) =>
@@ -157,6 +183,24 @@ export const reducePicker = (state: PickerState, action: PickerAction): PickerSt
 
     case "preview": {
       return preview(state, action.open, action.diff === true);
+    }
+
+    case "dialog": {
+      return { ...state, dialog: action.dialog, hint: undefined };
+    }
+
+    case "link-focus": {
+      return { ...state, linkFocus: action.index };
+    }
+
+    case "link-toggle": {
+      const unticked = new Set(state.linkUnticked);
+
+      if (!unticked.delete(action.folder)) {
+        unticked.add(action.folder);
+      }
+
+      return { ...state, linkUnticked: unticked };
     }
 
     default: {
@@ -230,11 +274,16 @@ export const pickerIntent = (name: string, ctrl: boolean): PickerIntent | undefi
     : undefined;
 };
 
-/** What a key press does to the picker as a whole. */
+/**
+ * What a key press does to the picker as a whole. `confirm` is Enter, which may still raise a
+ * dialog; `dialog` is any key while one is open, which the dialog decides.
+ */
 export type PickerKeyOutcome =
   | { readonly kind: "pass" }
   | { readonly kind: "act"; readonly action: PickerAction }
-  | { readonly kind: "finish"; readonly selection: ReadonlySet<string> | undefined };
+  | { readonly kind: "confirm" }
+  | { readonly kind: "dialog" }
+  | { readonly kind: "cancel" };
 
 const PASS: PickerKeyOutcome = { kind: "pass" };
 
@@ -251,7 +300,11 @@ export const pickerKeyOutcome = (
   const intent = pickerIntent(name, ctrl);
 
   if (state.previewing) {
-    return ctrl && intent?.kind === "cancel" ? { kind: "finish", selection: undefined } : PASS;
+    return ctrl && intent?.kind === "cancel" ? { kind: "cancel" } : PASS;
+  }
+
+  if (state.dialog !== undefined) {
+    return { kind: "dialog" };
   }
 
   if (name === "space" && focusedUntickable(state)) {
@@ -266,7 +319,7 @@ export const pickerKeyOutcome = (
     return { kind: "act", action: intent };
   }
 
-  return { kind: "finish", selection: intent.kind === "confirm" ? state.selected : undefined };
+  return { kind: intent.kind };
 };
 
 export const selectionSummary = (state: PickerState) =>

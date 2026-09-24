@@ -13,6 +13,7 @@ import {
   readLock,
   ScillaError,
   traverse,
+  unansweredAgents,
   type AuditReport,
   type Choice,
   type Lock,
@@ -20,6 +21,7 @@ import {
   type Scope,
   type Source,
 } from "@scilla/core";
+import type { PickResult } from "@scilla/tui";
 import type { InstallFlags } from "./args.ts";
 import { reviewAudit, startAudit } from "./audit.ts";
 import { scopeFor, type Io } from "./io.ts";
@@ -63,17 +65,28 @@ const changesOf = async (current: Session, lock: Lock, choice: Choice) => {
   return (await diffSkill(before, choice.skill.dir)).patch;
 };
 
-/** Open the picker, which shows the ratings as they arrive; unattended, take the pre-ticked choices. */
-const pick = (current: Session, plan: Plan, lock: Lock, audit: Promise<AuditReport>) => {
+/**
+ * Open the picker, which shows the ratings as they arrive, confirms risky ones and asks about
+ * linking into an agent folder that doesn't exist yet; unattended, take the pre-ticked choices.
+ */
+const pick = (
+  current: Session,
+  plan: Plan,
+  lock: Lock,
+  audit: Promise<AuditReport>,
+): Promise<PickResult | undefined> => {
   if (unattended(current)) {
-    return Promise.resolve<ReadonlySet<string>>(
-      new Set(plan.choices.flatMap((choice) => (choice.selected ? [choice.skill.name] : []))),
-    );
+    return Promise.resolve({
+      selected: new Set(
+        plan.choices.flatMap((choice) => (choice.selected ? [choice.skill.name] : [])),
+      ),
+    });
   }
 
   const diff = (choice: Choice) => changesOf(current, lock, choice);
+  const askLinks = unansweredAgents(current.scope, lock.agentLinks);
 
-  return current.io.tui.pickSkills(plan, { audit, diff });
+  return current.io.tui.pickSkills(plan, { audit, diff, askLinks });
 };
 
 const warnExecutables = (reporter: Reporter, plan: Plan, selected: ReadonlySet<string>) => {
@@ -88,7 +101,7 @@ const warnExecutables = (reporter: Reporter, plan: Plan, selected: ReadonlySet<s
 
 /**
  * Traverse, pick and install one Collection; undefined when the pick (or the confirmation a risky
- * rating asks for) was cancelled. Ratings are fetched while the picker is open.
+ * rating asks for in it) was cancelled. Ratings are fetched while the picker is open.
  */
 const installFrom = async (current: Session, source: Source): Promise<Picked | undefined> => {
   const { io, reporter } = current;
@@ -102,18 +115,21 @@ const installFrom = async (current: Session, source: Source): Promise<Picked | u
   const lock = await readLock(current.scope);
   const plan = await markChanged(planInstall(traversal, lock, current.flags.all), lock);
   const ratings = startAudit(io, traversal.skills, current.flags.audit);
-  const selected = await pick(current, plan, lock, ratings);
+  const picked = await pick(current, plan, lock, ratings);
 
-  if (selected === undefined) {
+  if (picked === undefined) {
     return undefined;
   }
 
-  const ticked = plan.choices.flatMap(({ skill }) =>
-    selected.has(skill.name) ? [skill.name] : [],
-  );
+  const { selected, agentLinks } = picked;
 
-  if (!(await reviewAudit(io, reporter, ratings, ticked, !unattended(current)))) {
-    return undefined;
+  // The picker confirmed risky ratings itself; unattended, they're printed and warned about.
+  if (unattended(current)) {
+    const ticked = plan.choices.flatMap(({ skill }) =>
+      selected.has(skill.name) ? [skill.name] : [],
+    );
+
+    await reviewAudit(reporter, ratings, ticked);
   }
 
   warnExecutables(reporter, plan, selected);
@@ -122,6 +138,7 @@ const installFrom = async (current: Session, source: Source): Promise<Picked | u
   const outcome = await applyPlan(current.scope, lock, plan, selected, {
     force: current.flags.force,
     decide: !unattended(current),
+    agentLinks,
   });
 
   reporter.line(`${traversal.name} (${plan.key}) at ${shortCommit(traversal.commit)}`);

@@ -3,6 +3,7 @@ import { createCliRenderer } from "@opentui/core";
 import { createRoot } from "@opentui/react";
 import type { AuditReport, Choice, Plan } from "@scilla/core";
 import type { ReactNode } from "react";
+import type { AskLinks, PickResult } from "./confirm-model.ts";
 import type { HomeAction, HomeContext } from "./home-model.ts";
 import { HomeScreen } from "./HomeScreen.tsx";
 import { SkillPicker } from "./SkillPicker.tsx";
@@ -27,12 +28,17 @@ export interface PickOptions {
   readonly audit?: Promise<AuditReport> | undefined;
   /** Loads a changed skill's changes since the lock (a unified diff), shown with `d`. */
   readonly diff?: ((choice: Choice) => Promise<string>) | undefined;
+  /** Agents whose folder doesn't exist yet, to ask about linking the skills into after Enter. */
+  readonly askLinks?: AskLinks;
 }
 
-/** Let the Consumer choose skills from a plan; resolves with the chosen names, or undefined on cancel. */
-export const pickSkills = (plan: Plan, { audit, diff }: PickOptions = {}) =>
-  runScreen<ReadonlySet<string> | undefined>((done) => (
-    <SkillPicker plan={plan} audit={audit} diff={diff} onDone={done} />
+/**
+ * Let the Consumer choose skills from a plan, confirming risky ratings and answering `askLinks` in
+ * the picker; resolves with what they chose, or undefined on cancel.
+ */
+export const pickSkills = (plan: Plan, { audit, diff, askLinks }: PickOptions = {}) =>
+  runScreen<PickResult | undefined>((done) => (
+    <SkillPicker plan={plan} audit={audit} diff={diff} askLinks={askLinks} onDone={done} />
   ));
 
 /** The bare `scilla` home screen; resolves with what to do next, or undefined on Quit. */

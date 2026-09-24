@@ -2,16 +2,23 @@
 
 ## Where files go
 
-| What            | Project (default)                                | Global (`-g`)                                    |
-| --------------- | ------------------------------------------------ | ------------------------------------------------ |
-| Skill folders   | `./.agents/skills/<name>/`                       | `~/.agents/skills/<name>/`                       |
-| Agent links     | `./.claude/skills/<name>`, if `./.claude` exists | `~/.claude/skills/<name>`, if `~/.claude` exists |
-| scilla's lock   | `./scilla-lock.json`                             | `~/.agents/scilla-lock.json`                     |
-| skills CLI lock | `./skills-lock.json`                             | none                                             |
+| What            | Project (default)                     | Global (`-g`)                         |
+| --------------- | ------------------------------------- | ------------------------------------- |
+| Skill folders   | `./.agents/skills/<name>/`            | `~/.agents/skills/<name>/`            |
+| Agent links     | `./.claude/skills/<name>` (see below) | `~/.claude/skills/<name>` (see below) |
+| scilla's lock   | `./scilla-lock.json`                  | `~/.agents/scilla-lock.json`          |
+| skills CLI lock | `./skills-lock.json`                  | none                                  |
 
 "Project" is the current directory. Each skill folder is copied without `.git` and `node_modules`.
 The agent link is a relative symlink to the copy; if a real folder already sits there, it's left
 alone with a warning. This is the layout the `skills` CLI uses.
+
+When an agent's folder (today only `.claude`, for Claude Code) doesn't exist yet, the picker asks
+once, after Enter, whether to link the skills into `<folder>/skills` anyway (creating it); with
+several such agents it shows a checklist. Each answer is saved per folder as `agentLinks` in
+`scilla-lock.json`, so later runs, `-y` runs and teammates' `scilla install` follow it without
+asking; saying yes also links skills that were already installed. Without an answer, skills are
+linked only when the agent's folder exists.
 
 ## scilla-lock.json
 

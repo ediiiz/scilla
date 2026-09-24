@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, test } from "bun:test";
-import type { AuditReport } from "@scilla/core";
+import type { Agent, AuditReport } from "@scilla/core";
 import { act } from "react";
+import type { PickResult } from "./confirm-model.ts";
 import { SkillPicker } from "./SkillPicker.tsx";
 import { plan } from "./test-fixtures.ts";
 import { mountScreen, reporter, unmountAll } from "./test-render.ts";
@@ -15,7 +16,7 @@ const mount = async (
   const { reported, done } = reporter<ReadonlySet<string> | undefined>();
 
   const screen = await mountScreen(
-    <SkillPicker plan={fixture} audit={audit} onDone={done} />,
+    <SkillPicker plan={fixture} audit={audit} onDone={(result) => done(result?.selected)} />,
     100,
     height,
   );
@@ -335,5 +336,131 @@ describe("SkillPicker ratings", () => {
 
     expect(frame()).toContain("Snyk  critical · score 12");
     expect(frame()).toContain("  https://skills.sh/acme/skills");
+  });
+});
+
+/** A picker that reports its whole result, for the dialogs Enter can open. */
+const CLAUDE: Agent = { folder: ".claude", name: "Claude Code" };
+
+const CURSOR: Agent = { folder: ".cursor", name: "Cursor" };
+
+const confirming = async (audit?: Promise<AuditReport>, askLinks?: readonly Agent[]) => {
+  const { reported, done } = reporter<PickResult | undefined>();
+
+  const screen = await mountScreen(
+    <SkillPicker plan={rated} audit={audit} askLinks={askLinks} onDone={done} />,
+    100,
+    30,
+  );
+
+  return { ...screen, outcome: reported };
+};
+
+describe("SkillPicker confirmation", () => {
+  test("a risky tick asks before finishing; n goes back, y installs", async () => {
+    const { frame, press, waitFor, outcome } = await confirming(Promise.resolve(REPORT));
+
+    await waitFor("alpha low");
+    await press("j", " ", "RETURN");
+
+    expect(frame()).toContain("Rated medium risk or higher");
+    expect(frame()).toContain("beta  critical");
+    expect(frame()).not.toContain("alpha  low");
+
+    await press(" ", "n");
+
+    expect(frame()).not.toContain("Rated medium risk or higher");
+    expect(outcome.value).toBe("pending");
+
+    await press("RETURN", "y");
+
+    expect(outcome.value).toEqual({ selected: new Set(["alpha", "beta"]) });
+  });
+
+  test("nothing risky and nothing to ask finishes on Enter", async () => {
+    const { press, waitFor, outcome } = await confirming(Promise.resolve(REPORT));
+
+    await waitFor("alpha low");
+    await press("RETURN");
+
+    expect(outcome.value).toEqual({ selected: new Set(["alpha"]) });
+  });
+
+  test("Enter before the ratings arrive waits for them, then goes on when none is risky", async () => {
+    const audit = pendingAudit();
+    const { frame, press, waitFor, outcome } = await confirming(audit.promise);
+
+    await press("RETURN");
+
+    expect(frame()).toContain("Still checking the security ratings");
+
+    await audit.resolve(REPORT);
+    await waitFor("alpha low");
+
+    expect(outcome.value).toEqual({ selected: new Set(["alpha"]) });
+  });
+
+  test("asks about linking into a missing agent folder and returns the answer", async () => {
+    const declined = await confirming(undefined, [CLAUDE]);
+
+    await declined.press("RETURN");
+
+    expect(declined.frame()).toContain("Link the skills into it, so Claude Code finds them");
+
+    await declined.press("n");
+
+    expect(declined.outcome.value).toEqual({
+      selected: new Set(["alpha"]),
+      agentLinks: { ".claude": false },
+    });
+
+    const accepted = await confirming(Promise.resolve(REPORT), [CLAUDE]);
+
+    await accepted.waitFor("alpha low");
+    await accepted.press("j", " ", "RETURN", "y");
+
+    expect(accepted.frame()).toContain("Link the skills into it, so Claude Code finds them");
+
+    await accepted.press("ESCAPE");
+
+    expect(accepted.frame()).not.toContain("Link the skills");
+
+    await accepted.press("RETURN", "y", "y");
+
+    expect(accepted.outcome.value).toEqual({
+      selected: new Set(["alpha", "beta"]),
+      agentLinks: { ".claude": true },
+    });
+  });
+
+  test("with several agents, a checklist records each answer", async () => {
+    const { frame, press, outcome } = await confirming(undefined, [CLAUDE, CURSOR]);
+
+    await press("RETURN");
+
+    expect(frame()).toContain("› [x] .claude/skills  Claude Code");
+    expect(frame()).toContain("  [x] .cursor/skills  Cursor");
+
+    await press("j", " ");
+
+    expect(frame()).toContain("› [ ] .cursor/skills  Cursor");
+
+    await press("y");
+
+    expect(outcome.value).toEqual({
+      selected: new Set(["alpha"]),
+      agentLinks: { ".claude": true, ".cursor": false },
+    });
+  });
+
+  test("n answers no for every agent", async () => {
+    const { press, outcome } = await confirming(undefined, [CLAUDE, CURSOR]);
+
+    await press("RETURN", "n");
+
+    expect(outcome.value).toEqual({
+      selected: new Set(["alpha"]),
+      agentLinks: { ".claude": false, ".cursor": false },
+    });
   });
 });

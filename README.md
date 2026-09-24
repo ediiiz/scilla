@@ -57,7 +57,7 @@ team-skills/
   - Pin a git ref with `#v1.4.0`; without a Pin, the Reference follows the latest upstream.
 - **Nested Collections**: when a Reference points at another Collection, scilla follows that Collection's References too, and detects cycles.
 
-**The Consumer** (anyone installing it) runs `scilla add`. scilla follows every Reference (this is called a **Traversal**), shows you the full set, and installs what you pick into `.agents/skills`. If `.claude` exists, it also symlinks each skill into `.claude/skills`. This is the same layout the [`skills`](https://github.com/vercel-labs/skills) CLI uses, and scilla keeps `skills-lock.json` in sync so both tools agree.
+**The Consumer** (anyone installing it) runs `scilla add`. scilla follows every Reference (this is called a **Traversal**), shows you the full set, and installs what you pick into `.agents/skills`. It also symlinks each skill into `.claude/skills`: when `.claude` doesn't exist yet, the picker asks once and the lock remembers the answer. This is the same layout the [`skills`](https://github.com/vercel-labs/skills) CLI uses, and scilla keeps `skills-lock.json` in sync so both tools agree.
 
 Nobody copies third-party skills by hand anymore. The Curator curates, and the sources stay where they are.
 
@@ -201,7 +201,7 @@ Security risk assessments
   Details: https://skills.sh/vercel-labs/agent-skills
 ```
 
-- **Rated medium or worse:** on a terminal, scilla asks `Proceed with installation? [y/N]` first. With `-y`, it warns and carries on.
+- **Rated medium or worse:** on a terminal, the picker lists those skills when you press Enter and asks whether to install anyway. With `-y`, scilla prints the table, warns and carries on.
 - **Later:** `scilla audit` shows the same table for everything you've installed.
 - **Not audited:** a skill without ratings shows `--`. That means nobody has rated it, not that it's safe.
 - **Privacy:** only public GitHub repos are rated. scilla checks with GitHub that a repo is public before it sends the repo's name and its skill names. Private repos, SSH URLs, other git hosts and local folders never leave your machine.

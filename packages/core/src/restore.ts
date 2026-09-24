@@ -5,11 +5,12 @@ import type { Outcome } from "./consumer.ts";
 import { ScillaError } from "./errors.ts";
 import type { Fetcher } from "./fetch.ts";
 import { hashIfPresent } from "./hash.ts";
-import { installedHash, installSkillFiles } from "./install.ts";
+import { installedHash, installSkillFiles, linkSkill } from "./install.ts";
 import {
   skillsDir,
   skillsLockNames,
   syncSkillsLock,
+  type AgentLinks,
   type Lock,
   type Scope,
   type SkillEntry,
@@ -36,11 +37,12 @@ const DIFFERS =
 
 type Step =
   | { readonly kind: "installed" | "updated"; readonly warnings: readonly string[] }
-  | { readonly kind: "unchanged" }
+  | { readonly kind: "unchanged"; readonly warnings?: readonly string[] }
   | { readonly kind: "skipped" | "failed"; readonly reason: string };
 
 interface Context {
   readonly scope: Scope;
+  readonly agentLinks: AgentLinks | undefined;
   readonly fetcher: Fetcher;
   readonly force: boolean;
 }
@@ -66,7 +68,7 @@ const installLocked = async (context: Context, name: string, entry: SkillEntry, 
     } as const;
   }
 
-  const warnings = await installSkillFiles(context.scope, name, dir);
+  const warnings = await installSkillFiles(context.scope, name, dir, context.agentLinks);
 
   return { kind: fresh ? "installed" : "updated", warnings } as const;
 };
@@ -75,7 +77,11 @@ const restoreSkill = async (context: Context, name: string, entry: SkillEntry): 
   const current = await installedHash(context.scope, name);
 
   if (current === entry.computedHash) {
-    return { kind: "unchanged" };
+    // Linked anyway, so a teammate gets the links the lock asks for on an existing install.
+    return {
+      kind: "unchanged",
+      warnings: await linkSkill(context.scope, name, context.agentLinks),
+    };
   }
 
   if (current !== undefined && !context.force) {
@@ -109,6 +115,7 @@ const record = (restore: Restore, name: string, step: Step) => {
 
     case "unchanged": {
       restore.unchanged.push(name);
+      restore.warnings.push(...(step.warnings ?? []));
 
       return;
     }
@@ -132,7 +139,7 @@ export const restoreLock = async (
   fetcher: Fetcher,
   { force = false }: RestoreOptions = {},
 ): Promise<Restore> => {
-  const context = { scope, fetcher, force };
+  const context = { scope, fetcher, force, agentLinks: lock.agentLinks };
   const names = Object.keys(lock.skills).toSorted();
 
   const steps = await Promise.all(

@@ -5,7 +5,7 @@ that bundles skills the Curator wrote (Own Skills) with pointers to skills that 
 (References). One command installs the whole set; another keeps it current with every source.
 
 Skills land in `.agents/skills/<name>/`, the same layout the `skills` CLI uses, and are linked into
-`.claude/skills/` when a `.claude` folder exists.
+`.claude/skills/`. When there's no `.claude` folder yet, the picker asks once whether to create it.
 
 scilla needs Bun 1.4 or newer and fetches through your own `git`, so private repos work with the
 credentials git already has.

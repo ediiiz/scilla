@@ -15,6 +15,8 @@ afterAll(removeTemps);
 
 const lockOf = (base: string) => JSON.parse(readFileSync(join(base, "scilla-lock.json"), "utf8"));
 
+const linked = (base: string, name: string) => existsSync(join(base, ".claude", "skills", name));
+
 const installed = (base: string, name: string) =>
   existsSync(join(base, ".agents", "skills", name, "SKILL.md"));
 
@@ -76,7 +78,7 @@ describe("add", () => {
   test("on a terminal the picker decides", async () => {
     const result = await cli(["add", kit()], {
       interactive: true,
-      pickSkills: () => Promise.resolve(new Set(["extra"])),
+      pickSkills: () => Promise.resolve({ selected: new Set(["extra"]) }),
     });
 
     expect(result.plans).toHaveLength(1);
@@ -88,6 +90,67 @@ describe("add", () => {
     expect(result.stdout).toContain("Installed: extra");
     expect(result.stderr).not.toContain("executable");
     expect(installed(result.io.cwd, "alpha")).toBe(false);
+  });
+
+  test("asks once whether to link into a missing .claude, then follows the lock's answer", async () => {
+    const source = kit();
+    const asked: (readonly string[] | undefined)[] = [];
+
+    const yes = await cli(["add", source], {
+      interactive: true,
+      pickSkills: (_plan, options) => {
+        asked.push(options?.askLinks?.map((agent) => agent.folder));
+
+        return Promise.resolve({ selected: new Set(["alpha"]), agentLinks: { ".claude": true } });
+      },
+    });
+
+    const project = yes.io.cwd;
+
+    expect(asked).toEqual([[".claude"]]);
+    expect(lockOf(project).agentLinks).toEqual({ ".claude": true });
+    expect(linked(project, "alpha")).toBe(true);
+
+    // Answered: the picker isn't asked again, and an unattended run links as the lock says.
+    await cli(["update"], {
+      cwd: project,
+      interactive: true,
+      pickSkills: (_plan, options) => {
+        asked.push(options?.askLinks?.map((agent) => agent.folder));
+
+        return Promise.resolve({ selected: new Set(["alpha", "tool"]) });
+      },
+    });
+
+    expect(asked).toEqual([[".claude"], []]);
+    expect(linked(project, "tool")).toBe(true);
+
+    const no = await cli(["add", source], {
+      interactive: true,
+      pickSkills: () =>
+        Promise.resolve({ selected: new Set(["alpha"]), agentLinks: { ".claude": false } }),
+    });
+
+    expect(lockOf(no.io.cwd).agentLinks).toEqual({ ".claude": false });
+    expect(existsSync(join(no.io.cwd, ".claude"))).toBe(false);
+  });
+
+  test("saying yes links skills that were already installed and unchanged", async () => {
+    const source = kit();
+    const first = await cli(["add", source]);
+    const project = first.io.cwd;
+
+    await cli(["add", source], {
+      cwd: project,
+      interactive: true,
+      pickSkills: (plan) =>
+        Promise.resolve({
+          selected: new Set(plan.choices.flatMap((c) => (c.selected ? [c.skill.name] : []))),
+          agentLinks: { ".claude": true },
+        }),
+    });
+
+    expect(existsSync(join(project, ".claude", "skills", "alpha", "SKILL.md"))).toBe(true);
   });
 
   test("a cancelled pick changes nothing", async () => {
@@ -228,7 +291,7 @@ describe("update", () => {
 
         shown.push(one === undefined ? "" : await (options?.diff?.(one) ?? ""));
 
-        return new Set(["one"]);
+        return { selected: new Set(["one"]) };
       },
     });
 
@@ -249,7 +312,7 @@ describe("update", () => {
     const result = await cli(["update"], {
       cwd,
       interactive: true,
-      pickSkills: () => Promise.resolve(new Set(["one", "two"])),
+      pickSkills: () => Promise.resolve({ selected: new Set(["one", "two"]) }),
     });
 
     expect(result.plans[0]?.choices.map((choice) => choice.status)).toEqual(["installed", "new"]);
